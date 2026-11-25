@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import mujoco
 import yaml
 
+from .appearance import Appearance, read_appearance
 from .kinematics import (
     POSITION_MAX_RAD,
     POSITION_MIN_RAD,
@@ -16,6 +17,12 @@ from .kinematics import (
     SINGLE_FINGER_STROKE_M,
     drive_angle_for_closure,
 )
+
+_mj: Any = mujoco
+if TYPE_CHECKING:
+    type MjSpec = Any
+else:
+    MjSpec = mujoco.MjSpec
 
 
 def get_data_root() -> Path:
@@ -27,6 +34,11 @@ def get_data_root() -> Path:
     if (repo_root / "mjcf" / "gripper_chassis.xml").is_file():
         return repo_root
     raise FileNotFoundError("未找到夹爪描述资产目录（mjcf/gripper_chassis.xml 不存在）")
+
+
+def list_appearances() -> list[str]:
+    """返回夹爪材质库提供的外观预设名称。"""
+    return list(read_appearance(get_data_root() / "config" / "appearance.yaml")["presets"])
 
 
 def list_sensors() -> list[str]:
@@ -57,19 +69,26 @@ def get_sensor_spec(name: str) -> dict[str, Any]:
 
 
 def get_stroke_limits(
-    left_sensor: str | None = "pts_2_0", right_sensor: str | None = "pts_2_0",
+    left_sensor: str | None = "pts_2_0",
+    right_sensor: str | None = "pts_2_0",
 ) -> dict[str, Any]:
     """返回协议角度、机构行程及所选模组首次接触前的工作行程。
 
     模组行程按名义刚体几何计算，角度为包含回差的实际曲柄角。
     在机构行程内无模组接触时，首次接触字段为 None。
     """
-    sensors = [get_sensor_spec(name) if name not in (None, "none") else None
-               for name in (left_sensor, right_sensor)]
+    sensors = [
+        get_sensor_spec(name) if name is not None and name != "none" else None
+        for name in (left_sensor, right_sensor)
+    ]
     mount_gap = get_specs()["geometry"]["nominal_full_open_sensor_mount_gap_m"]
-    tip_gap = mount_gap - sum(sensor["thickness_to_tip_m"] for sensor in sensors if sensor is not None)
+    tip_gap = mount_gap - sum(
+        sensor["thickness_to_tip_m"] for sensor in sensors if sensor is not None
+    )
     contact_slide = tip_gap / 2
-    has_contact = all(sensor is not None for sensor in sensors) and contact_slide <= SINGLE_FINGER_STROKE_M
+    has_contact = (
+        all(sensor is not None for sensor in sensors) and contact_slide <= SINGLE_FINGER_STROKE_M
+    )
     contact_q = drive_angle_for_closure(contact_slide) if has_contact else None
     return {
         "protocol_range_rad": PROTOCOL_RANGE_RAD,
@@ -78,12 +97,17 @@ def get_stroke_limits(
         "first_contact_q_rad": contact_q,
         "first_contact_single_finger_closure_m": contact_slide if has_contact else None,
         "no_contact_range_rad": (POSITION_MIN_RAD, contact_q if has_contact else POSITION_MAX_RAD),
-        "no_contact_single_finger_stroke_m": contact_slide if has_contact else SINGLE_FINGER_STROKE_M,
+        "no_contact_single_finger_stroke_m": contact_slide
+        if has_contact
+        else SINGLE_FINGER_STROKE_M,
     }
 
 
 def get_tactile_layout(
-    left_sensor: str | None = "pts_2_0", right_sensor: str | None = "pts_2_0", *, prefix: str = "",
+    left_sensor: str | None = "pts_2_0",
+    right_sensor: str | None = "pts_2_0",
+    *,
+    prefix: str = "",
 ) -> dict[str, dict[str, Any] | None]:
     """按侧返回触觉阵列及 MJCF geom/site 名称，无触觉的一侧返回 None。
 
@@ -91,9 +115,9 @@ def get_tactile_layout(
     """
     layout = {}
     for side, name in (("left", left_sensor), ("right", right_sensor)):
-        sensor = get_sensor_spec(name) if name not in (None, "none") else None
+        sensor = get_sensor_spec(name) if name is not None and name != "none" else None
         tactile = sensor["tactile"] if sensor is not None else None
-        if tactile is None:
+        if sensor is None or tactile is None:
             layout[side] = None
             continue
         geom_prefix = prefix + tactile[f"{side}_prefix"]
@@ -101,9 +125,13 @@ def get_tactile_layout(
         taxels = []
         for taxel in sensor["taxels_in_sensor_mount"]:
             index = f"{taxel['row']}{taxel['col']}"
-            taxels.append({**taxel, "geom_name": geom_prefix + index, "site_name": site_prefix + index})
+            taxels.append(
+                {**taxel, "geom_name": geom_prefix + index, "site_name": site_prefix + index}
+            )
         layout[side] = {
-            "mode": tactile["mode"], "rows": tactile["rows"], "cols": tactile["cols"],
+            "mode": tactile["mode"],
+            "rows": tactile["rows"],
+            "cols": tactile["cols"],
             "site_quat_in_sensor_mount_wxyz": tactile["site_quat_in_sensor_mount_wxyz"],
             "taxels": taxels,
         }
@@ -125,15 +153,18 @@ def _load_chassis_spec(
     backlash_rad: float | None,
     slide_frictionloss_n: float | None,
     drive_frictionloss_nm: float | None,
-) -> mujoco.MjSpec:
+    appearance: Appearance | None,
+) -> MjSpec:
     """加载底盘 XML 并按需覆盖机构参数与固定基座设置。"""
     chassis_path = data_root / "mjcf" / "gripper_chassis.xml"
     root = ET.parse(chassis_path).getroot()
     compiler = root.find("compiler")
+    assert compiler is not None
     compiler.set("meshdir", str((data_root / "meshes").resolve()))
 
     if fixed_base:
         base = root.find(".//body[@name='base']")
+        assert base is not None
         for freejoint in base.findall("freejoint"):
             base.remove(freejoint)
 
@@ -159,20 +190,30 @@ def _load_chassis_spec(
                         parent.remove(backlash)
                         break
 
-    return mujoco.MjSpec.from_string(ET.tostring(root, encoding="unicode"))
+    return _parse_spec(root, appearance)
 
 
-def _load_module_spec(xml_path: Path, meshes_dir: Path) -> mujoco.MjSpec:
+def _load_module_spec(xml_path: Path, meshes_dir: Path, appearance: Appearance | None) -> MjSpec:
     """加载传感器或相机模组 XML 并解析其绝对网格目录。"""
     root = ET.parse(xml_path).getroot()
     compiler = root.find("compiler")
     if compiler is not None and compiler.get("meshdir"):
         compiler.set("meshdir", str(meshes_dir.resolve()))
-    return mujoco.MjSpec.from_string(ET.tostring(root, encoding="unicode"))
+    return _parse_spec(root, appearance)
+
+
+def _parse_spec(root: ET.Element, appearance: Appearance | None) -> MjSpec:
+    spec = _mj.MjSpec.from_string(ET.tostring(root, encoding="unicode"))
+    if appearance is not None:
+        appearance.apply(spec)
+    return spec
 
 
 def _add_module_contact_exclusions(
-    spec: mujoco.MjSpec, left: bool, right: bool, with_camera: bool,
+    spec: MjSpec,
+    left: bool,
+    right: bool,
+    with_camera: bool,
 ) -> None:
     """按挂载情况排除底盘装配界面处的内部接触。"""
     for side, mounted in (("left", left), ("right", right)):
@@ -192,12 +233,14 @@ def build_gripper_spec(
     backlash_rad: float | None = None,
     slide_frictionloss_n: float | None = None,
     drive_frictionloss_nm: float | None = None,
-) -> mujoco.MjSpec:
+    appearance: str | None = None,
+) -> MjSpec:
     """按参数模块化组装夹爪 MuJoCo MjSpec。
 
     参数
         left_sensor: 左指传感器模组名（如 ``pts_2_0``、``flat_pad``），``None`` 或 ``"none"`` 不挂传感器。
         right_sensor: 右指传感器模组名，语义同 ``left_sensor``。
+        appearance: 外观预设名；省略时沿用资产自带的材质。
         with_camera: 是否挂载侧置 RealSense D435i 支架与相机。
         fixed_base: 为 True 时移除 ``base_freejoint``，便于直接挂载到地面或机械臂法兰。
         backlash_rad: 可选覆盖 ``gripper_backlash`` 回差总宽度 (rad)；<=0 时移除回差关节。
@@ -209,9 +252,15 @@ def build_gripper_spec(
     """
     data_root = get_data_root()
     meshes_dir = data_root / "meshes"
+    palette = None
+    if appearance is not None:
+        palette = Appearance.from_library(
+            read_appearance(data_root / "config" / "appearance.yaml"), appearance
+        )
     spec = _load_chassis_spec(
         data_root,
         fixed_base=fixed_base,
+        appearance=palette,
         backlash_rad=backlash_rad,
         slide_frictionloss_n=slide_frictionloss_n,
         drive_frictionloss_nm=drive_frictionloss_nm,
@@ -219,7 +268,7 @@ def build_gripper_spec(
 
     if with_camera:
         cam_xml = data_root / "mjcf" / "accessories" / "realsense_d435i.xml"
-        cam_spec = _load_module_spec(cam_xml, meshes_dir)
+        cam_spec = _load_module_spec(cam_xml, meshes_dir, palette)
         spec.attach(cam_spec, prefix="cam_", frame=spec.frame("camera_mount_frame"))
 
     available = set(list_sensors())
@@ -229,10 +278,13 @@ def build_gripper_spec(
         if sensor_name not in available:
             raise ValueError(f"未知传感器模组 {sensor_name!r}，可选：{sorted(available)}")
         sensor_xml = data_root / "mjcf" / "sensors" / f"{sensor_name}.xml"
-        sensor_spec = _load_module_spec(sensor_xml, meshes_dir)
+        sensor_spec = _load_module_spec(sensor_xml, meshes_dir, palette)
         spec.attach(sensor_spec, prefix=f"{side}_", frame=spec.frame(f"{side}_sensor_mount"))
 
     _add_module_contact_exclusions(
-        spec, left_sensor not in (None, "none"), right_sensor not in (None, "none"), with_camera,
+        spec,
+        left_sensor not in (None, "none"),
+        right_sensor not in (None, "none"),
+        with_camera,
     )
     return spec

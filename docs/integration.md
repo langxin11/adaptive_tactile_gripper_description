@@ -88,14 +88,15 @@ xacro "$(ros2 pkg prefix adaptive_tactile_gripper_description)/share/adaptive_ta
 
 ### 2.1 锁定版本依赖
 
-本描述包声明 `mujoco>=3.2.0,<5`，与当前下游锁定的 3.10.0 有交集。下游双 PTS 配置可以将 `model` 指向任一预生成整机 MJCF。载入 XML 时按原有流程删除 `base_freejoint` 后再挂载到载体或 FR3 法兰。
+本描述包声明 `mujoco>=3.10.0,<5`，与当前下游锁定的 3.10.0 有交集。下游双 PTS 配置可以将 `model` 指向任一预生成整机 MJCF。载入 XML 时按原有流程删除 `base_freejoint` 后再挂载到载体或 FR3 法兰。
 
 在 `tactile_grasp/pyproject.toml` 中与 `papillarray-pts` 同样以固定 Git 标签引入（并经 `uv lock` 锁定哈希）：
 
 ```toml
 dependencies = [
-    ...
-    "adaptive-tactile-gripper-description @ git+https://github.com/langxin11/adaptive_tactile_gripper_description.git@v0.1.0",
+    # 其余已有依赖
+    # v0.2.0 标签发布后可用
+    "adaptive-tactile-gripper-description @ git+https://github.com/langxin11/adaptive_tactile_gripper_description.git@v0.2.0",
 ]
 ```
 
@@ -116,7 +117,11 @@ dependencies = [
 ### 2.3 动态组合仿真场景
 
 ```python
-from adaptive_tactile_gripper_description import build_gripper_spec, get_stroke_limits, get_tactile_layout
+from adaptive_tactile_gripper_description import (
+    build_gripper_spec,
+    get_stroke_limits,
+    get_tactile_layout,
+)
 
 gripper_spec = build_gripper_spec(
     left_sensor="pts_2_0",
@@ -135,6 +140,16 @@ layout = get_tactile_layout("pts_2_0", "flat_pad", prefix="gripper/")
 
 真机的 `*_sensor_link` 与安装系同向，`taxel_*` 受力站点相对安装系绕局部 X 轴旋转 **Rx(π)**，各原点在相应球心。桥接 `hub_*/sensor_*` 的六轴 wrench 时，先核对 `frame_id` 和参考原点。变换力及力矩时使用同一旋转，移动力矩参考点时添加相应的力臂叉乘项，并将协议的 N·mm 转为 N·m。当前仿真读取器输出逐触点三轴力。
 
+
+### 2.4 外观与场景挂载
+
+外观参数 `appearance` 与查询接口 `list_appearances()` 自 0.2.0 起可用。依赖示例固定到 v0.2.0 标签，发布后可用。
+
+`build_gripper_spec(appearance="realistic")` 和 `build_gripper_spec(appearance="cad")` 在内存中为底盘、两侧指尖与相机设置材质。省略参数时，接口沿用资产自带的预设。通过 `list_appearances()` 查询可用名称。MuJoCo 挂载模组时为材质名添加 `left_`、`right_` 或 `cam_` 前缀，因此混装时也能定位材质类别。
+
+同一类别下的零件可以有不同颜色，例如真机指根的橙色加强片，以及 CAD 中不同颜色的支架。读取 MJCF 时须同时考虑 geom 的 `rgba` 和关联材质。Xacro 已写入每件的最终 RGBA，RViz 随所安装资产显示。要在 ROS 2 中切换整套配色，在描述包源码目录运行 `uv run python tools/build_description.py --appearance cad` 并重新构建、加载该包。默认构建命令会生成真机配色。
+
+天空盒、网格地面、布光与离屏采样由预览脚本创建。下游场景可以直接 `attach` 夹爪，并由宿主模型设置全局渲染参数。新增模组视觉网格时，应在材质库登记规范网格名和类别，构建会检查缺失映射。[外观配置](../config/appearance.yaml)
 
 ---
 

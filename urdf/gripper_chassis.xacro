@@ -20,27 +20,27 @@
       <visual>
         <origin xyz="-0.075 0 0.07755" rpy="0 0 1.57079632679"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/mgn9_rail.stl"/></geometry>
-        <material name="mgn9_rail_material"><color rgba="0.6 0.6 0.6 1"/></material>
+        <material name="${ns}_steel"><color rgba="0.68235294 0.70980392 0.7372549 1"/></material>
       </visual>
       <visual>
         <origin xyz="0 0 0.012" rpy="0 0 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/stator.stl"/></geometry>
-        <material name="stator_material"><color rgba="0.34902 0.376471 0.4 1"/></material>
+        <material name="${ns}_anodized_black"><color rgba="0.2 0.21960784 0.24313725 1"/></material>
       </visual>
       <visual>
         <origin xyz="0 0 0.05955" rpy="0 0 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/bracket_2.stl"/></geometry>
-        <material name="bracket_2_material"><color rgba="0.917647 0.917647 0.917647 1"/></material>
+        <material name="${ns}_pla_cf_structure"><color rgba="0.14117647 0.26666667 0.62352941 1"/></material>
       </visual>
       <visual>
         <origin xyz="0 0 0.007" rpy="0 0 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/motor_mount.stl"/></geometry>
-        <material name="motor_mount_material"><color rgba="0.615686 0.811765 0.929412 1"/></material>
+        <material name="${ns}_pla_cf_structure"><color rgba="0.14117647 0.26666667 0.62352941 1"/></material>
       </visual>
       <visual>
         <origin xyz="0 0 0.007" rpy="0 0 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/franka_adapter.stl"/></geometry>
-        <material name="franka_adapter_material"><color rgba="0.647059 0.647059 0.647059 1"/></material>
+        <material name="${ns}_pla_cf_structure"><color rgba="0.14117647 0.26666667 0.62352941 1"/></material>
       </visual>
       <collision name="${ns}_base_collision">
         <origin xyz="0 0 0.03" rpy="0 0 0"/>
@@ -71,12 +71,12 @@
       <visual>
         <origin xyz="0 0 0.02" rpy="0 0 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/crank.stl"/></geometry>
-        <material name="crank_material"><color rgba="0.615686 0.811765 0.929412 1"/></material>
+        <material name="${ns}_pla_cf_structure"><color rgba="0.14117647 0.26666667 0.62352941 1"/></material>
       </visual>
       <visual>
         <origin xyz="0 0 -0.02905" rpy="0 0 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/motor.stl"/></geometry>
-        <material name="motor_material"><color rgba="0.647059 0.647059 0.647059 1"/></material>
+        <material name="${ns}_anodized_black"><color rgba="0.2 0.21960784 0.24313725 1"/></material>
       </visual>
     </link>
     <joint name="${ns}_left_link_crank_pin" type="revolute">
@@ -95,47 +95,47 @@
       <visual>
         <origin xyz="0.0176777 -0.0176777 0.0105" rpy="3.14159265359 0 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/bearing_8x4x2.stl"/></geometry>
-        <material name="bearing_8x4x2_material"><color rgba="0.8 0.8 0.8 1"/></material>
+        <material name="${ns}_steel"><color rgba="0.68235294 0.70980392 0.7372549 1"/></material>
       </visual>
       <visual>
         <origin xyz="0.0176777 -0.0176777 0.0106" rpy="3.14159265359 0 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/shim.stl"/></geometry>
-        <material name="shim_material"><color rgba="0.647059 0.647059 0.647059 1"/></material>
+        <material name="${ns}_steel"><color rgba="0.68235294 0.70980392 0.7372549 1"/></material>
       </visual>
       <visual>
         <origin xyz="0.0176777 -0.0176777 0.0105" rpy="3.14159265359 0 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/bearing_8x4x2_2.stl"/></geometry>
-        <material name="bearing_8x4x2_2_material"><color rgba="0.8 0.8 0.8 1"/></material>
+        <material name="${ns}_steel"><color rgba="0.68235294 0.70980392 0.7372549 1"/></material>
       </visual>
       <visual>
         <origin xyz="-0.0435355 0 0.0041" rpy="0 0 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/link_spacer.stl"/></geometry>
-        <material name="link_spacer_material"><color rgba="0.615686 0.811765 0.929412 1"/></material>
+        <material name="${ns}_pla_cf_structure"><color rgba="0.14117647 0.26666667 0.62352941 1"/></material>
       </visual>
       <visual>
         <origin xyz="0.0176777 -0.0176777 0.0105" rpy="3.14159265359 0 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/link.stl"/></geometry>
-        <material name="link_material"><color rgba="0.231373 0.380392 0.705882 1"/></material>
+        <material name="${ns}_pla_cf_structure"><color rgba="0.14117647 0.26666667 0.62352941 1"/></material>
       </visual>
       <visual>
         <origin xyz="-0.0258579 -0.0176777 0.0029" rpy="3.14159265359 0 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/shim.stl"/></geometry>
-        <material name="shim_material"><color rgba="0.647059 0.647059 0.647059 1"/></material>
+        <material name="${ns}_steel"><color rgba="0.68235294 0.70980392 0.7372549 1"/></material>
       </visual>
       <visual>
         <origin xyz="0 0 -0.0101" rpy="3.14159265359 0 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/link_spacer.stl"/></geometry>
-        <material name="link_spacer_material"><color rgba="0.615686 0.811765 0.929412 1"/></material>
+        <material name="${ns}_pla_cf_structure"><color rgba="0.14117647 0.26666667 0.62352941 1"/></material>
       </visual>
       <visual>
         <origin xyz="0.0176777 -0.0176777 0.0105" rpy="3.14159265359 0 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/bearing_8x4x2_3.stl"/></geometry>
-        <material name="bearing_8x4x2_3_material"><color rgba="0.8 0.8 0.8 1"/></material>
+        <material name="${ns}_steel"><color rgba="0.68235294 0.70980392 0.7372549 1"/></material>
       </visual>
       <visual>
         <origin xyz="0.0176777 -0.0176777 0.0105" rpy="3.14159265359 0 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/bearing_8x4x2_4.stl"/></geometry>
-        <material name="bearing_8x4x2_4_material"><color rgba="0.8 0.8 0.8 1"/></material>
+        <material name="${ns}_steel"><color rgba="0.68235294 0.70980392 0.7372549 1"/></material>
       </visual>
     </link>
     <joint name="${ns}_right_link_crank_pin" type="revolute">
@@ -154,47 +154,47 @@
       <visual>
         <origin xyz="0.0176777 -0.0176777 0.0105" rpy="3.14159265359 0 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/bearing_8x4x2.stl"/></geometry>
-        <material name="bearing_8x4x2_material"><color rgba="0.8 0.8 0.8 1"/></material>
+        <material name="${ns}_steel"><color rgba="0.68235294 0.70980392 0.7372549 1"/></material>
       </visual>
       <visual>
         <origin xyz="0.0176777 -0.0176777 0.0106" rpy="3.14159265359 0 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/shim.stl"/></geometry>
-        <material name="shim_material"><color rgba="0.647059 0.647059 0.647059 1"/></material>
+        <material name="${ns}_steel"><color rgba="0.68235294 0.70980392 0.7372549 1"/></material>
       </visual>
       <visual>
         <origin xyz="0.0176777 -0.0176777 0.0105" rpy="3.14159265359 0 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/bearing_8x4x2_2.stl"/></geometry>
-        <material name="bearing_8x4x2_2_material"><color rgba="0.8 0.8 0.8 1"/></material>
+        <material name="${ns}_steel"><color rgba="0.68235294 0.70980392 0.7372549 1"/></material>
       </visual>
       <visual>
         <origin xyz="-0.0435355 0 0.0041" rpy="0 0 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/link_spacer.stl"/></geometry>
-        <material name="link_spacer_material"><color rgba="0.615686 0.811765 0.929412 1"/></material>
+        <material name="${ns}_pla_cf_structure"><color rgba="0.14117647 0.26666667 0.62352941 1"/></material>
       </visual>
       <visual>
         <origin xyz="0.0176777 -0.0176777 0.0105" rpy="3.14159265359 0 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/link.stl"/></geometry>
-        <material name="link_material"><color rgba="0.231373 0.380392 0.705882 1"/></material>
+        <material name="${ns}_pla_cf_structure"><color rgba="0.14117647 0.26666667 0.62352941 1"/></material>
       </visual>
       <visual>
         <origin xyz="-0.0258579 -0.0176777 0.0029" rpy="3.14159265359 0 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/shim.stl"/></geometry>
-        <material name="shim_material"><color rgba="0.647059 0.647059 0.647059 1"/></material>
+        <material name="${ns}_steel"><color rgba="0.68235294 0.70980392 0.7372549 1"/></material>
       </visual>
       <visual>
         <origin xyz="0 0 -0.0101" rpy="3.14159265359 0 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/link_spacer.stl"/></geometry>
-        <material name="link_spacer_material"><color rgba="0.615686 0.811765 0.929412 1"/></material>
+        <material name="${ns}_pla_cf_structure"><color rgba="0.14117647 0.26666667 0.62352941 1"/></material>
       </visual>
       <visual>
         <origin xyz="0.0176777 -0.0176777 0.0105" rpy="3.14159265359 0 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/bearing_8x4x2_3.stl"/></geometry>
-        <material name="bearing_8x4x2_3_material"><color rgba="0.8 0.8 0.8 1"/></material>
+        <material name="${ns}_steel"><color rgba="0.68235294 0.70980392 0.7372549 1"/></material>
       </visual>
       <visual>
         <origin xyz="0.0176777 -0.0176777 0.0105" rpy="3.14159265359 0 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/bearing_8x4x2_4.stl"/></geometry>
-        <material name="bearing_8x4x2_4_material"><color rgba="0.8 0.8 0.8 1"/></material>
+        <material name="${ns}_steel"><color rgba="0.68235294 0.70980392 0.7372549 1"/></material>
       </visual>
     </link>
     <joint name="${ns}_left_finger_slide" type="prismatic">
@@ -213,22 +213,22 @@
       <visual>
         <origin xyz="0 -0.0065 0" rpy="-1.57079632679 0 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/mgn9_block.stl"/></geometry>
-        <material name="mgn9_block_material"><color rgba="0.647059 0.647059 0.647059 1"/></material>
+        <material name="${ns}_steel"><color rgba="0.68235294 0.70980392 0.7372549 1"/></material>
       </visual>
       <visual>
         <origin xyz="0 0.0035 0.01445" rpy="-1.57079632679 -1.57079632679 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/finger_body.stl"/></geometry>
-        <material name="finger_body_material"><color rgba="0.972549 0.529412 0.00392157 1"/></material>
+        <material name="${ns}_pla_finger"><color rgba="0.98823529 0.4 0.15686275 1"/></material>
       </visual>
       <visual>
         <origin xyz="0 0.0035 0.01445" rpy="-1.57079632679 -1.57079632679 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/finger_mount.stl"/></geometry>
-        <material name="finger_mount_material"><color rgba="0.615686 0.811765 0.929412 1"/></material>
+        <material name="${ns}_pla_cf_structure"><color rgba="0.14117647 0.26666667 0.62352941 1"/></material>
       </visual>
       <visual>
         <origin xyz="0 0.0035 0.01445" rpy="-1.57079632679 -1.57079632679 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/finger_brace.stl"/></geometry>
-        <material name="finger_brace_material"><color rgba="0.231373 0.380392 0.705882 1"/></material>
+        <material name="${ns}_pla_cf_structure__finger_brace"><color rgba="0.87058824 0.31372549 0.14117647 1"/></material>
       </visual>
       <collision name="${ns}_left_mgn9_block_back_collision">
         <origin xyz="0 -0.00050000006 ${0.01445 + (-0.5) * safety_distance}" rpy="0 0 0"/>
@@ -270,22 +270,22 @@
       <visual>
         <origin xyz="0 0.0065 0.0289" rpy="1.57079632679 0 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/mgn9_block.stl"/></geometry>
-        <material name="mgn9_block_material"><color rgba="0.647059 0.647059 0.647059 1"/></material>
+        <material name="${ns}_steel"><color rgba="0.68235294 0.70980392 0.7372549 1"/></material>
       </visual>
       <visual>
         <origin xyz="0 -0.0035 0.01445" rpy="1.57079632679 -1.57079632679 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/finger_body.stl"/></geometry>
-        <material name="finger_body_material"><color rgba="0.972549 0.529412 0.00392157 1"/></material>
+        <material name="${ns}_pla_finger"><color rgba="0.98823529 0.4 0.15686275 1"/></material>
       </visual>
       <visual>
         <origin xyz="0 -0.0035 0.01445" rpy="1.57079632679 -1.57079632679 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/finger_mount.stl"/></geometry>
-        <material name="finger_mount_material"><color rgba="0.615686 0.811765 0.929412 1"/></material>
+        <material name="${ns}_pla_cf_structure"><color rgba="0.14117647 0.26666667 0.62352941 1"/></material>
       </visual>
       <visual>
         <origin xyz="0 -0.0035 0.01445" rpy="1.57079632679 -1.57079632679 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/finger_brace.stl"/></geometry>
-        <material name="finger_brace_material"><color rgba="0.231373 0.380392 0.705882 1"/></material>
+        <material name="${ns}_pla_cf_structure__finger_brace"><color rgba="0.87058824 0.31372549 0.14117647 1"/></material>
       </visual>
       <collision name="${ns}_right_mgn9_block_back_collision">
         <origin xyz="0 0.00050000006 ${0.01445 + (-0.5) * safety_distance}" rpy="0 0 0"/>

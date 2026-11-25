@@ -17,16 +17,16 @@
   <worldbody>
     <body name="sensor_body" pos="0 0 0" quat="1 0 0 0" childclass="parallel_gripper">
       <inertial pos="-0.0022674886 6.897054e-10 -0.00085107362" mass="0.015" fullinertia="8.0379122e-07 1.121524e-06 1.6757149e-06 0 -2.7169202e-08 0" />
-      <geom type="mesh" class="visual" pos="0 0 0" quat="0.5 0.5 0.5 0.5" mesh="pillars_4" material="pillars_4_material" />
-      <geom type="mesh" class="visual" pos="0 0 0" quat="0.5 0.5 0.5 0.5" mesh="pillars_6" material="pillars_6_material" />
-      <geom type="mesh" class="visual" pos="0 0 0" quat="0.5 0.5 0.5 0.5" mesh="housing" material="housing_material" />
-      <geom type="mesh" class="visual" pos="0 0 0" quat="0.5 0.5 0.5 0.5" mesh="pillars_3" material="pillars_3_material" />
-      <geom type="mesh" class="visual" pos="0 0 0" quat="0.5 0.5 0.5 0.5" mesh="pillars_5" material="pillars_5_material" />
-      <geom type="mesh" class="visual" pos="0 0 0" quat="0.5 0.5 0.5 0.5" mesh="pillars_8" material="pillars_8_material" />
-      <geom type="mesh" class="visual" pos="0 0 0" quat="0.5 0.5 0.5 0.5" mesh="pillars_0" material="pillars_0_material" />
-      <geom type="mesh" class="visual" pos="0 0 0" quat="0.5 0.5 0.5 0.5" mesh="pillars_1" material="pillars_1_material" />
-      <geom type="mesh" class="visual" pos="0 0 0" quat="0.5 0.5 0.5 0.5" mesh="pillars_7" material="pillars_7_material" />
-      <geom type="mesh" class="visual" pos="0 0 0" quat="0.5 0.5 0.5 0.5" mesh="pillars_2" material="pillars_2_material" />
+      <geom type="mesh" class="visual" pos="0 0 0" quat="0.5 0.5 0.5 0.5" mesh="pillars_4" material="silicone" />
+      <geom type="mesh" class="visual" pos="0 0 0" quat="0.5 0.5 0.5 0.5" mesh="pillars_6" material="silicone" />
+      <geom type="mesh" class="visual" pos="0 0 0" quat="0.5 0.5 0.5 0.5" mesh="housing" material="pts_housing" />
+      <geom type="mesh" class="visual" pos="0 0 0" quat="0.5 0.5 0.5 0.5" mesh="pillars_3" material="silicone" />
+      <geom type="mesh" class="visual" pos="0 0 0" quat="0.5 0.5 0.5 0.5" mesh="pillars_5" material="silicone" />
+      <geom type="mesh" class="visual" pos="0 0 0" quat="0.5 0.5 0.5 0.5" mesh="pillars_8" material="silicone" />
+      <geom type="mesh" class="visual" pos="0 0 0" quat="0.5 0.5 0.5 0.5" mesh="pillars_0" material="silicone" />
+      <geom type="mesh" class="visual" pos="0 0 0" quat="0.5 0.5 0.5 0.5" mesh="pillars_1" material="silicone" />
+      <geom type="mesh" class="visual" pos="0 0 0" quat="0.5 0.5 0.5 0.5" mesh="pillars_7" material="silicone" />
+      <geom type="mesh" class="visual" pos="0 0 0" quat="0.5 0.5 0.5 0.5" mesh="pillars_2" material="silicone" />
       <geom name="sensor_housing_collision" class="collision" type="box" pos="-0.0033 0 -0.0015" size="0.0153 0.012 0.0043" contype="4" conaffinity="1" />
       <geom type="sphere" class="pillar_collision" name="taxel_geom_00" pos="0.007 -0.007 0.0033" size="0.0028" />
       <site group="3" name="taxel_00" pos="0.007 -0.007 0.0033" quat="0 1 0 0" />
@@ -51,24 +51,16 @@
   </worldbody>
   <asset>
     <mesh name="housing" file="housing.stl" />
-    <mesh name="pillars_0" file="pillars_0.stl" />
-    <mesh name="pillars_1" file="pillars_1.stl" />
-    <mesh name="pillars_2" file="pillars_2.stl" />
-    <mesh name="pillars_3" file="pillars_3.stl" />
-    <mesh name="pillars_4" file="pillars_4.stl" />
-    <mesh name="pillars_5" file="pillars_5.stl" />
-    <mesh name="pillars_6" file="pillars_6.stl" />
-    <mesh name="pillars_7" file="pillars_7.stl" />
-    <mesh name="pillars_8" file="pillars_8.stl" />
-    <material name="housing_material" rgba="0.627451 0.627451 0.627451 1" />
-    <material name="pillars_0_material" rgba="1 0 1 1" />
-    <material name="pillars_1_material" rgba="1 0 1 1" />
-    <material name="pillars_2_material" rgba="1 0 1 1" />
-    <material name="pillars_3_material" rgba="1 0 1 1" />
-    <material name="pillars_4_material" rgba="1 0 1 1" />
-    <material name="pillars_5_material" rgba="1 0 1 1" />
-    <material name="pillars_6_material" rgba="1 0 1 1" />
-    <material name="pillars_7_material" rgba="1 0 1 1" />
-    <material name="pillars_8_material" rgba="1 0 1 1" />
+    <mesh name="pillars_0" file="pillars_0.stl" smoothnormal="true" />
+    <mesh name="pillars_1" file="pillars_1.stl" smoothnormal="true" />
+    <mesh name="pillars_2" file="pillars_2.stl" smoothnormal="true" />
+    <mesh name="pillars_3" file="pillars_3.stl" smoothnormal="true" />
+    <mesh name="pillars_4" file="pillars_4.stl" smoothnormal="true" />
+    <mesh name="pillars_5" file="pillars_5.stl" smoothnormal="true" />
+    <mesh name="pillars_6" file="pillars_6.stl" smoothnormal="true" />
+    <mesh name="pillars_7" file="pillars_7.stl" smoothnormal="true" />
+    <mesh name="pillars_8" file="pillars_8.stl" smoothnormal="true" />
+    <material name="pts_housing" rgba="0.16078431 0.16862745 0.19607843 1" specular="0.33" shininess="0.4" reflectance="0.015" />
+    <material name="silicone" rgba="0.83529412 0.79215686 0.80784314 1" specular="0.085" shininess="0.12" reflectance="0" />
   </asset>
 </mujoco>

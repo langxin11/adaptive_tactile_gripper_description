@@ -15,12 +15,12 @@
       <visual>
         <origin xyz="0 0 0.007" rpy="0 0 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/camera_mount.stl"/></geometry>
-        <material name="camera_mount_material"><color rgba="0.917647 0.917647 0.917647 1"/></material>
+        <material name="${ns}_pla_cf_structure"><color rgba="0.14117647 0.26666667 0.62352941 1"/></material>
       </visual>
       <visual>
         <origin xyz="0.0125 -0.0685273 0.0279714" rpy="0.244345450549 0 3.14159265359"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/d435i_solid.stl"/></geometry>
-        <material name="d435i_solid_material"><color rgba="0.796078 0.823529 0.937255 1"/></material>
+        <material name="${ns}_aluminum"><color rgba="0.71764706 0.72156863 0.71372549 1"/></material>
       </visual>
       <collision name="${ns}_camera_mount_collision">
         <origin xyz="0.012501027 -0.064000001 0.0005423393" rpy="0 0 0"/>

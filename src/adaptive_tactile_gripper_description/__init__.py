@@ -11,9 +11,12 @@ from .assembly import (
     get_stroke_limits,
     get_tactile_layout,
     list_accessories,
+    list_appearances,
     list_sensors,
 )
 from .kinematics import get_closure_jacobian, get_joint_positions
+
+__version__ = "0.2.0"
 
 __all__ = [
     "build_gripper_spec",
@@ -26,5 +29,6 @@ __all__ = [
     "get_stroke_limits",
     "get_tactile_layout",
     "list_accessories",
+    "list_appearances",
     "list_sensors",
 ]

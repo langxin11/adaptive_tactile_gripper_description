@@ -4,7 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "adaptive-tactile-gripper-description"
-version = "0.1.0"
+version = "0.2.0"
+authors = [{name = "Daliang Xiao", email = "2658327508@qq.com"}]
+maintainers = [{name = "Daliang Xiao", email = "2658327508@qq.com"}]
+keywords = ["robotics", "gripper", "mujoco", "ros2", "tactile"]
+classifiers = ["Programming Language :: Python :: 3.12", "License :: OSI Approved :: MIT License", "Topic :: Scientific/Engineering"]
 description = "DM4310 曲柄滑块自适应触觉夹爪描述包（模块化 MJCF / URDF / SRDF 与硬件规格）"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -13,19 +17,29 @@ dependencies = [
     "mujoco>=3.10.0,<5",
     "numpy>=2.0",
     "PyYAML>=6.0",
+    "matplotlib>=3.9",
+    "pillow>=10.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/langxin11/adaptive_tactile_gripper_description"
+
+[project.scripts]
+atg-description = "adaptive_tactile_gripper_description.cli:main"
 
 [dependency-groups]
 dev = [
+    "ruff>=0.15.16",
     "pytest>=9,<10",
-    "matplotlib>=3.9",
-    "pillow>=10.0",
+    "pyright>=1.1.414",
 ]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/adaptive_tactile_gripper_description"]
 
 [tool.hatch.build.targets.wheel.force-include]
+"tools/render_figures.py" = "adaptive_tactile_gripper_description/_data/tools/render_figures.py"
+"tools/_style.py" = "adaptive_tactile_gripper_description/_data/tools/_style.py"
 "meshes" = "adaptive_tactile_gripper_description/_data/meshes"
 "mjcf" = "adaptive_tactile_gripper_description/_data/mjcf"
 "urdf" = "adaptive_tactile_gripper_description/_data/urdf"
@@ -35,3 +49,23 @@ packages = ["src/adaptive_tactile_gripper_description"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["build", "install", "log", "outputs"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
+
+[tool.pyright]
+include = ["src", "tools/_style.py", "tools/render_figures.py"]
+typeCheckingMode = "basic"
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+default = true

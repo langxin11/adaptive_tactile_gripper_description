@@ -1,0 +1,34 @@
+name: CI
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    env:
+      MUJOCO_GL: egl
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1-mesa-dri fonts-noto-cjk
+      - run: uv sync --locked
+      - run: uv run ruff check . && uv run ruff format --check .
+      - run: uv run pyright
+      - run: uv run pytest
+  ros:
+    runs-on: ubuntu-24.04
+    container: ros:jazzy
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: apt-get update && apt-get install -y ros-jazzy-xacro ros-jazzy-urdfdom ros-jazzy-urdfdom-headers python3-colcon-common-extensions g++ libgl1
+      - run: |
+          source /opt/ros/jazzy/setup.bash
+          cd /tmp
+          colcon build --base-paths "$GITHUB_WORKSPACE" --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3
+          cd "$GITHUB_WORKSPACE"
+          uv sync --locked
+          uv run pytest tests/test_cross_format.py

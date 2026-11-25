@@ -1,0 +1,241 @@
+{
+  "mjcf/accessories/realsense_d435i.xml": [
+    [
+      "compiler",
+      "9c8696d22641e37dd6b29435a34d9c135b8189d04e7db82ac80c82e0c09bfda8"
+    ],
+    [
+      "default",
+      "6b8c379687593f215355a86dbfdf8629e5846b486a959f18101c5abd616dc947"
+    ],
+    [
+      "worldbody",
+      "d628e87aa7446dd40f72abc320b1a9e587a118f2deba747af312cbea2afe2a29"
+    ],
+    [
+      "asset",
+      "057919cad48488a166ba95e9c113424bee9811113b6b0a794b2bcb712b380c16"
+    ]
+  ],
+  "mjcf/gripper.xml": [
+    [
+      "compiler",
+      "d45c3e59cb55137becc438043f19b517b8ca5f71ecb008b689b31fed81e5a95b"
+    ],
+    [
+      "default",
+      "fde6ac8cbd070c66f89dda90c930a776a3f0a91786cb3ed0146c4ee24ae771c4"
+    ],
+    [
+      "asset",
+      "809628ea963d46cc7b92c812e6636c0c32689dde8681ff258d98bfac158d1e6e"
+    ],
+    [
+      "worldbody",
+      "b04f53e729904ed719a0bd828186f38b2d7d998b72d9c65a6f732a69cb0adf7e"
+    ],
+    [
+      "contact",
+      "731ff54355b84bdb0bc8b558308a7b80b6146f9a4a06b0782c20c5835d098087"
+    ],
+    [
+      "equality",
+      [
+        {
+          "type": "connect",
+          "body1": "left_finger",
+          "body2": "rod_bearing_shim_subassembly",
+          "anchor": "-0.0176777 -0.0045 0.0137868",
+          "solref": "0.002",
+          "solimp": "0.99 0.999 0.0005"
+        },
+        {
+          "type": "connect",
+          "body1": "left_finger",
+          "body2": "rod_bearing_shim_subassembly",
+          "anchor": "-0.0176777 0.0955 0.0137868",
+          "solref": "0.002",
+          "solimp": "0.99 0.999 0.0005"
+        },
+        {
+          "type": "connect",
+          "body1": "right_finger",
+          "body2": "rod_bearing_shim_subassembly_2",
+          "anchor": "0.0176777 0.0045 0.0137868",
+          "solref": "0.002",
+          "solimp": "0.99 0.999 0.0005"
+        },
+        {
+          "type": "connect",
+          "body1": "right_finger",
+          "body2": "rod_bearing_shim_subassembly_2",
+          "anchor": "0.0176777 -0.0955 0.0137868",
+          "solref": "0.002",
+          "solimp": "0.99 0.999 0.0005"
+        }
+      ]
+    ],
+    [
+      "actuator",
+      "3ae5effaf0fdde93d6f4a9556b245fa2b0bbc69d1bfe1077dfbb534a3bfa8be4"
+    ]
+  ],
+  "mjcf/gripper_chassis.xml": [
+    [
+      "compiler",
+      "d45c3e59cb55137becc438043f19b517b8ca5f71ecb008b689b31fed81e5a95b"
+    ],
+    [
+      "default",
+      "cb9aaccf83cc42d83832c38b69af004637dc3e85503f66890c9c00a4fe3db6d6"
+    ],
+    [
+      "worldbody",
+      "3a2da6ead34b59acd3b00b8bbdded6390e87adb22f93763544f7ade0cd9df27b"
+    ],
+    [
+      "asset",
+      "dc8dff144833dff4467d63207060feaf09e278957f39ac89968c33c973570563"
+    ],
+    [
+      "actuator",
+      "16521321903e20c2c8c66dbecd10468bc012ae0c36861fa6921142fc8cdbe3fd"
+    ],
+    [
+      "contact",
+      "256cb470a20b17c4b727840ac0b781b6f11209545a841c568eb0d6cde7893f4c"
+    ],
+    [
+      "equality",
+      [
+        {
+          "type": "connect",
+          "body1": "left_finger",
+          "body2": "rod_bearing_shim_subassembly",
+          "anchor": "-0.0176777 -0.0045 0.0137868",
+          "solref": "0.002 1",
+          "solimp": "0.99 0.999 0.0005 0.5 2"
+        },
+        {
+          "type": "connect",
+          "body1": "left_finger",
+          "body2": "rod_bearing_shim_subassembly",
+          "anchor": "-0.0176777 0.0955 0.0137868",
+          "solref": "0.002 1",
+          "solimp": "0.99 0.999 0.0005 0.5 2"
+        },
+        {
+          "type": "connect",
+          "body1": "right_finger",
+          "body2": "rod_bearing_shim_subassembly_2",
+          "anchor": "0.0176777 0.0045 0.0137868",
+          "solref": "0.002 1",
+          "solimp": "0.99 0.999 0.0005 0.5 2"
+        },
+        {
+          "type": "connect",
+          "body1": "right_finger",
+          "body2": "rod_bearing_shim_subassembly_2",
+          "anchor": "0.0176777 -0.0955 0.0137868",
+          "solref": "0.002 1",
+          "solimp": "0.99 0.999 0.0005 0.5 2"
+        }
+      ]
+    ]
+  ],
+  "mjcf/gripper_no_camera.xml": [
+    [
+      "compiler",
+      "d45c3e59cb55137becc438043f19b517b8ca5f71ecb008b689b31fed81e5a95b"
+    ],
+    [
+      "default",
+      "48f4259c20905e755a5a0dace1817859f4e76d93c37062b17faa4bce316bd225"
+    ],
+    [
+      "asset",
+      "90383725249b1c2025ffc1c1a13013a5d48fc9060867cc64dbfff1ced0fea382"
+    ],
+    [
+      "worldbody",
+      "87366ed52026f1d292a2aa0d7bd36103b3e2b21368d054155609d1d4ddb526b5"
+    ],
+    [
+      "contact",
+      "b8bba17bb078d6fe38459b5f48206cd80b95e71c23e6a77e9bd19b872f46c947"
+    ],
+    [
+      "equality",
+      [
+        {
+          "type": "connect",
+          "body1": "left_finger",
+          "body2": "rod_bearing_shim_subassembly",
+          "anchor": "-0.0176777 -0.0045 0.0137868",
+          "solref": "0.002",
+          "solimp": "0.99 0.999 0.0005"
+        },
+        {
+          "type": "connect",
+          "body1": "left_finger",
+          "body2": "rod_bearing_shim_subassembly",
+          "anchor": "-0.0176777 0.0955 0.0137868",
+          "solref": "0.002",
+          "solimp": "0.99 0.999 0.0005"
+        },
+        {
+          "type": "connect",
+          "body1": "right_finger",
+          "body2": "rod_bearing_shim_subassembly_2",
+          "anchor": "0.0176777 0.0045 0.0137868",
+          "solref": "0.002",
+          "solimp": "0.99 0.999 0.0005"
+        },
+        {
+          "type": "connect",
+          "body1": "right_finger",
+          "body2": "rod_bearing_shim_subassembly_2",
+          "anchor": "0.0176777 -0.0955 0.0137868",
+          "solref": "0.002",
+          "solimp": "0.99 0.999 0.0005"
+        }
+      ]
+    ],
+    [
+      "actuator",
+      "3ae5effaf0fdde93d6f4a9556b245fa2b0bbc69d1bfe1077dfbb534a3bfa8be4"
+    ]
+  ],
+  "mjcf/sensors/flat_pad.xml": [
+    [
+      "compiler",
+      "cd0d135ca826729cfa8b0c3f4a7d4fd0b958549dba764320fa768829b852af3f"
+    ],
+    [
+      "default",
+      "6b8c379687593f215355a86dbfdf8629e5846b486a959f18101c5abd616dc947"
+    ],
+    [
+      "worldbody",
+      "b79c6d4e7ffa243a18bf0eb9b9e9bc59b8a5a689723803c501bcfd438da5ccf6"
+    ]
+  ],
+  "mjcf/sensors/pts_2_0.xml": [
+    [
+      "compiler",
+      "9c8696d22641e37dd6b29435a34d9c135b8189d04e7db82ac80c82e0c09bfda8"
+    ],
+    [
+      "default",
+      "6b8c379687593f215355a86dbfdf8629e5846b486a959f18101c5abd616dc947"
+    ],
+    [
+      "worldbody",
+      "cebc90202de2a3cc813ab9444e794404777a092f051ab42d72c97c194457c8a7"
+    ],
+    [
+      "asset",
+      "f33e17e8a0ae14abc78f0a33b92519eef25ddf79a15a48605af9ad5e379b960d"
+    ]
+  ]
+}

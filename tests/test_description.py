@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from typing import get_type_hints
 
 import mujoco
 import numpy as np
@@ -22,11 +23,15 @@ from adaptive_tactile_gripper_description import (
 def _crank_slider_aperture(q: float, specs: dict) -> float:
     k = specs["kinematics"]
     r = k["crank_radius_m"]
-    l = k["link_length_m"]
+    link_length = k["link_length_m"]
     off = k["offset_m"]
     alpha = q + k["theta0_rad"]
-    radicand = l**2 - (r * math.sin(alpha) - off) ** 2
+    radicand = link_length**2 - (r * math.sin(alpha) - off) ** 2
     return 2.0 * (r * math.cos(alpha) + math.sqrt(radicand))
+
+
+def test_build_gripper_spec_return_annotation():
+    assert get_type_hints(build_gripper_spec)["return"] is mujoco.MjSpec
 
 
 def test_package_discovery_and_specs():
@@ -40,7 +45,11 @@ def test_package_discovery_and_specs():
     assert specs["geometry"]["tool_center_in_flange_m"] == [0.0, 0.0, 0.14555]
     assert specs["actuator"]["model"] == "DM-J4310P-2EC"
     assert math.isclose(specs["camera"]["bare_camera_mass_kg"], 0.072, abs_tol=1e-6)
-    assert math.isclose(specs["materials_and_mass_budget"]["breakdown_kg"]["total_without_camera"], 0.686, abs_tol=1e-4)
+    assert math.isclose(
+        specs["materials_and_mass_budget"]["breakdown_kg"]["total_without_camera"],
+        0.686,
+        abs_tol=1e-4,
+    )
 
     pts = get_sensor_spec("pts_2_0")
     assert pts["tactile"]["rows"] == 3 and pts["tactile"]["cols"] == 3
@@ -115,8 +124,12 @@ def test_taxel_poses_match_onshape_export():
         for row in range(3):
             for col in range(3):
                 name = f"{side}_taxel_{row}{col}"
-                np.testing.assert_allclose(raw_data.site(name).xpos, modular_data.site(name).xpos, atol=1e-7)
-                np.testing.assert_allclose(raw_data.site(name).xmat, modular_data.site(name).xmat, atol=1e-7)
+                np.testing.assert_allclose(
+                    raw_data.site(name).xpos, modular_data.site(name).xpos, atol=1e-7
+                )
+                np.testing.assert_allclose(
+                    raw_data.site(name).xmat, modular_data.site(name).xmat, atol=1e-7
+                )
 
 
 def test_closed_loop_crank_slider_kinematics_sweep():

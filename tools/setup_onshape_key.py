@@ -16,7 +16,7 @@ import string
 import sys
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 DEFAULT_API_URL = "https://cad.onshape.com"
@@ -36,12 +36,14 @@ def build_onshape_headers(
     """按 Onshape HMAC-SHA256 规范生成带签名的请求头。"""
     alphabet = string.ascii_uppercase + string.digits
     nonce = "".join(secrets.choice(alphabet) for _ in range(25))
-    date_str = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+    date_str = datetime.now(UTC).strftime("%a, %d %b %Y %H:%M:%S GMT")
 
     # 签名串末尾必须保留换行符，且整体转为小写后计算 HMAC-SHA256
     hmac_str = (
-        f"{method}\n{nonce}\n{date_str}\n{content_type}\n{path}\n{query}\n"
-    ).lower().encode("utf-8")
+        (f"{method}\n{nonce}\n{date_str}\n{content_type}\n{path}\n{query}\n")
+        .lower()
+        .encode("utf-8")
+    )
     digest = hmac.new(secret_key.encode("utf-8"), hmac_str, digestmod=hashlib.sha256).digest()
     signature = base64.b64encode(digest).decode("utf-8")
 
@@ -73,7 +75,10 @@ def verify_credentials(
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="ignore").strip()
         if exc.code == 401:
-            return False, "认证失败 (401)：请检查 Access Key / Secret Key 是否粘贴完整且未调换位置。"
+            return (
+                False,
+                "认证失败 (401)：请检查 Access Key / Secret Key 是否粘贴完整且未调换位置。",
+            )
         if exc.code == 403:
             return False, "权限不足 (403)：当前密钥无权访问该文档，请确认账号与读取权限。"
         if exc.code == 404:
@@ -187,7 +192,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.show_secret:
             secret_key = input("请粘贴 ONSHAPE_SECRET_KEY: ").strip()
         else:
-            secret_key = getpass.getpass("请粘贴 ONSHAPE_SECRET_KEY（输入时不回显，粘贴后回车）: ").strip()
+            secret_key = getpass.getpass(
+                "请粘贴 ONSHAPE_SECRET_KEY（输入时不回显，粘贴后回车）: "
+            ).strip()
         if not secret_key:
             print("错误：ONSHAPE_SECRET_KEY 不能为空。", file=sys.stderr)
             return 1

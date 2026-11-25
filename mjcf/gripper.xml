@@ -55,50 +55,20 @@
     </default>
   </default>
   <asset>
-    <material name="bearing_8x4x2_material" rgba="0.8 0.8 0.8 1" />
-    <material name="bearing_8x4x2_2_material" rgba="0.8 0.8 0.8 1" />
-    <material name="bearing_8x4x2_3_material" rgba="0.8 0.8 0.8 1" />
-    <material name="bearing_8x4x2_4_material" rgba="0.8 0.8 0.8 1" />
-    <material name="bracket_2_material" rgba="0.917647 0.917647 0.917647 1" />
-    <material name="crank_material" rgba="0.615686 0.811765 0.929412 1" />
-    <material name="finger_body_material" rgba="0.972549 0.529412 0.00392157 1" />
-    <material name="finger_brace_material" rgba="0.231373 0.380392 0.705882 1" />
-    <material name="finger_mount_material" rgba="0.615686 0.811765 0.929412 1" />
-    <material name="franka_adapter_material" rgba="0.647059 0.647059 0.647059 1" />
-    <material name="link_material" rgba="0.231373 0.380392 0.705882 1" />
-    <material name="link_spacer_material" rgba="0.615686 0.811765 0.929412 1" />
-    <material name="mgn9_block_material" rgba="0.647059 0.647059 0.647059 1" />
-    <material name="mgn9_rail_material" rgba="0.6 0.6 0.6 1" />
-    <material name="motor_material" rgba="0.647059 0.647059 0.647059 1" />
-    <material name="motor_mount_material" rgba="0.615686 0.811765 0.929412 1" />
-    <material name="shim_material" rgba="0.647059 0.647059 0.647059 1" />
-    <material name="stator_material" rgba="0.34902 0.376471 0.4 1" />
-    <material name="cam_camera_mount_material" rgba="0.917647 0.917647 0.917647 1" />
-    <material name="cam_d435i_solid_material" rgba="0.796078 0.823529 0.937255 1" />
-    <material name="left_housing_material" rgba="0.627451 0.627451 0.627451 1" />
-    <material name="left_pillars_0_material" rgba="1 0 1 1" />
-    <material name="left_pillars_1_material" rgba="1 0 1 1" />
-    <material name="left_pillars_2_material" rgba="1 0 1 1" />
-    <material name="left_pillars_3_material" rgba="1 0 1 1" />
-    <material name="left_pillars_4_material" rgba="1 0 1 1" />
-    <material name="left_pillars_5_material" rgba="1 0 1 1" />
-    <material name="left_pillars_6_material" rgba="1 0 1 1" />
-    <material name="left_pillars_7_material" rgba="1 0 1 1" />
-    <material name="left_pillars_8_material" rgba="1 0 1 1" />
-    <material name="right_housing_material" rgba="0.627451 0.627451 0.627451 1" />
-    <material name="right_pillars_0_material" rgba="1 0 1 1" />
-    <material name="right_pillars_1_material" rgba="1 0 1 1" />
-    <material name="right_pillars_2_material" rgba="1 0 1 1" />
-    <material name="right_pillars_3_material" rgba="1 0 1 1" />
-    <material name="right_pillars_4_material" rgba="1 0 1 1" />
-    <material name="right_pillars_5_material" rgba="1 0 1 1" />
-    <material name="right_pillars_6_material" rgba="1 0 1 1" />
-    <material name="right_pillars_7_material" rgba="1 0 1 1" />
-    <material name="right_pillars_8_material" rgba="1 0 1 1" />
-    <mesh name="bearing_8x4x2" content_type="model/stl" file="bearing_8x4x2.stl" />
-    <mesh name="bearing_8x4x2_2" content_type="model/stl" file="bearing_8x4x2_2.stl" />
-    <mesh name="bearing_8x4x2_3" content_type="model/stl" file="bearing_8x4x2_3.stl" />
-    <mesh name="bearing_8x4x2_4" content_type="model/stl" file="bearing_8x4x2_4.stl" />
+    <material name="anodized_black" specular="0.42" shininess="0.52" reflectance="0.025" rgba="0.2 0.219608 0.243137 1" />
+    <material name="pla_cf_structure" specular="0.075" shininess="0.12" rgba="0.141176 0.266667 0.623529 1" />
+    <material name="pla_finger" specular="0.12" shininess="0.18" rgba="0.988235 0.4 0.156863 1" />
+    <material name="steel" specular="0.76" shininess="0.78" reflectance="0.13" rgba="0.682353 0.709804 0.737255 1" />
+    <material name="cam_aluminum" specular="0.59" shininess="0.62" reflectance="0.075" rgba="0.717647 0.721569 0.713726 1" />
+    <material name="cam_pla_cf_structure" specular="0.075" shininess="0.12" rgba="0.141176 0.266667 0.623529 1" />
+    <material name="left_pts_housing" specular="0.33" shininess="0.4" reflectance="0.015" rgba="0.160784 0.168627 0.196078 1" />
+    <material name="left_silicone" specular="0.085" shininess="0.12" rgba="0.835294 0.792157 0.807843 1" />
+    <material name="right_pts_housing" specular="0.33" shininess="0.4" reflectance="0.015" rgba="0.160784 0.168627 0.196078 1" />
+    <material name="right_silicone" specular="0.085" shininess="0.12" rgba="0.835294 0.792157 0.807843 1" />
+    <mesh name="bearing_8x4x2" content_type="model/stl" file="bearing_8x4x2.stl" smoothnormal="true" />
+    <mesh name="bearing_8x4x2_2" content_type="model/stl" file="bearing_8x4x2_2.stl" smoothnormal="true" />
+    <mesh name="bearing_8x4x2_3" content_type="model/stl" file="bearing_8x4x2_3.stl" smoothnormal="true" />
+    <mesh name="bearing_8x4x2_4" content_type="model/stl" file="bearing_8x4x2_4.stl" smoothnormal="true" />
     <mesh name="bracket_2" content_type="model/stl" file="bracket_2.stl" />
     <mesh name="crank" content_type="model/stl" file="crank.stl" />
     <mesh name="finger_body" content_type="model/stl" file="finger_body.stl" />
@@ -109,42 +79,42 @@
     <mesh name="link_spacer" content_type="model/stl" file="link_spacer.stl" />
     <mesh name="mgn9_block" content_type="model/stl" file="mgn9_block.stl" />
     <mesh name="mgn9_rail" content_type="model/stl" file="mgn9_rail.stl" />
-    <mesh name="motor" content_type="model/stl" file="motor.stl" />
+    <mesh name="motor" content_type="model/stl" file="motor.stl" smoothnormal="true" />
     <mesh name="motor_mount" content_type="model/stl" file="motor_mount.stl" />
     <mesh name="shim" content_type="model/stl" file="shim.stl" />
-    <mesh name="stator" content_type="model/stl" file="stator.stl" />
+    <mesh name="stator" content_type="model/stl" file="stator.stl" smoothnormal="true" />
     <mesh name="cam_camera_mount" content_type="model/stl" file="camera_mount.stl" />
-    <mesh name="cam_d435i_solid" content_type="model/stl" file="d435i_solid.stl" />
+    <mesh name="cam_d435i_solid" content_type="model/stl" file="d435i_solid.stl" smoothnormal="true" />
     <mesh name="left_housing" content_type="model/stl" file="housing.stl" />
-    <mesh name="left_pillars_0" content_type="model/stl" file="pillars_0.stl" />
-    <mesh name="left_pillars_1" content_type="model/stl" file="pillars_1.stl" />
-    <mesh name="left_pillars_2" content_type="model/stl" file="pillars_2.stl" />
-    <mesh name="left_pillars_3" content_type="model/stl" file="pillars_3.stl" />
-    <mesh name="left_pillars_4" content_type="model/stl" file="pillars_4.stl" />
-    <mesh name="left_pillars_5" content_type="model/stl" file="pillars_5.stl" />
-    <mesh name="left_pillars_6" content_type="model/stl" file="pillars_6.stl" />
-    <mesh name="left_pillars_7" content_type="model/stl" file="pillars_7.stl" />
-    <mesh name="left_pillars_8" content_type="model/stl" file="pillars_8.stl" />
+    <mesh name="left_pillars_0" content_type="model/stl" file="pillars_0.stl" smoothnormal="true" />
+    <mesh name="left_pillars_1" content_type="model/stl" file="pillars_1.stl" smoothnormal="true" />
+    <mesh name="left_pillars_2" content_type="model/stl" file="pillars_2.stl" smoothnormal="true" />
+    <mesh name="left_pillars_3" content_type="model/stl" file="pillars_3.stl" smoothnormal="true" />
+    <mesh name="left_pillars_4" content_type="model/stl" file="pillars_4.stl" smoothnormal="true" />
+    <mesh name="left_pillars_5" content_type="model/stl" file="pillars_5.stl" smoothnormal="true" />
+    <mesh name="left_pillars_6" content_type="model/stl" file="pillars_6.stl" smoothnormal="true" />
+    <mesh name="left_pillars_7" content_type="model/stl" file="pillars_7.stl" smoothnormal="true" />
+    <mesh name="left_pillars_8" content_type="model/stl" file="pillars_8.stl" smoothnormal="true" />
     <mesh name="right_housing" content_type="model/stl" file="housing.stl" />
-    <mesh name="right_pillars_0" content_type="model/stl" file="pillars_0.stl" />
-    <mesh name="right_pillars_1" content_type="model/stl" file="pillars_1.stl" />
-    <mesh name="right_pillars_2" content_type="model/stl" file="pillars_2.stl" />
-    <mesh name="right_pillars_3" content_type="model/stl" file="pillars_3.stl" />
-    <mesh name="right_pillars_4" content_type="model/stl" file="pillars_4.stl" />
-    <mesh name="right_pillars_5" content_type="model/stl" file="pillars_5.stl" />
-    <mesh name="right_pillars_6" content_type="model/stl" file="pillars_6.stl" />
-    <mesh name="right_pillars_7" content_type="model/stl" file="pillars_7.stl" />
-    <mesh name="right_pillars_8" content_type="model/stl" file="pillars_8.stl" />
+    <mesh name="right_pillars_0" content_type="model/stl" file="pillars_0.stl" smoothnormal="true" />
+    <mesh name="right_pillars_1" content_type="model/stl" file="pillars_1.stl" smoothnormal="true" />
+    <mesh name="right_pillars_2" content_type="model/stl" file="pillars_2.stl" smoothnormal="true" />
+    <mesh name="right_pillars_3" content_type="model/stl" file="pillars_3.stl" smoothnormal="true" />
+    <mesh name="right_pillars_4" content_type="model/stl" file="pillars_4.stl" smoothnormal="true" />
+    <mesh name="right_pillars_5" content_type="model/stl" file="pillars_5.stl" smoothnormal="true" />
+    <mesh name="right_pillars_6" content_type="model/stl" file="pillars_6.stl" smoothnormal="true" />
+    <mesh name="right_pillars_7" content_type="model/stl" file="pillars_7.stl" smoothnormal="true" />
+    <mesh name="right_pillars_8" content_type="model/stl" file="pillars_8.stl" smoothnormal="true" />
   </asset>
   <worldbody>
     <body name="base" childclass="parallel_gripper">
       <freejoint name="base_freejoint" />
       <inertial pos="-4.8547631e-08 -0.00026450384 0.037700512" mass="0.46598154" fullinertia="0.00035479458 0.00049251687 0.00035791238 2.8219574e-11 -1.4546216e-10 -4.2153418e-06" />
-      <geom class="visual" pos="-0.075 0 0.07755" quat="0.707107 0 0 0.707107" material="mgn9_rail_material" mesh="mgn9_rail" />
-      <geom class="visual" pos="0 0 0.012" quat="1 0 0 0" material="stator_material" mesh="stator" />
-      <geom class="visual" pos="0 0 0.05955" quat="1 0 0 0" material="bracket_2_material" mesh="bracket_2" />
-      <geom class="visual" pos="0 0 0.007" quat="1 0 0 0" material="motor_mount_material" mesh="motor_mount" />
-      <geom class="visual" pos="0 0 0.007" quat="1 0 0 0" material="franka_adapter_material" mesh="franka_adapter" />
+      <geom class="visual" pos="-0.075 0 0.07755" quat="0.707107 0 0 0.707107" material="steel" mesh="mgn9_rail" />
+      <geom class="visual" pos="0 0 0.012" quat="1 0 0 0" material="anodized_black" mesh="stator" />
+      <geom class="visual" pos="0 0 0.05955" quat="1 0 0 0" material="pla_cf_structure" mesh="bracket_2" />
+      <geom class="visual" pos="0 0 0.007" quat="1 0 0 0" material="pla_cf_structure" mesh="motor_mount" />
+      <geom class="visual" pos="0 0 0.007" quat="1 0 0 0" material="pla_cf_structure" mesh="franka_adapter" />
       <geom name="base_collision" class="collision" size="0.045 0.031" pos="0 0 0.03" type="cylinder" />
       <geom name="rail_bridge_collision" class="collision" size="0.079 0.038 0.014" pos="0 0 0.071" type="box" />
       <geom name="adapter_tab_collision" class="collision" size="0.015001 0.0089635 0.003501" pos="0 -0.0470375 0.0035" type="box" />
@@ -153,35 +123,35 @@
         <inertial pos="0 0 0.01304976" mass="0.059605349" fullinertia="8.2802594e-06 8.2802497e-06 9.9379758e-06 -3.1479638e-07 0 0" />
         <joint name="gripper_drive" range="0 1.570796326794897" armature="0.002074755" damping="0.02532329" frictionloss="0.04" axis="0 0 1" type="hinge" />
         <joint name="gripper_backlash" solreflimit="0.002 1" solimplimit="0.95 0.99 0.0001 0.5 2" range="-0.0025 0.0025" frictionloss="0" axis="0 0 1" type="hinge" damping="0" armature="0" />
-        <geom class="visual" pos="0 0 0.02" quat="1 0 0 0" material="crank_material" mesh="crank" />
-        <geom class="visual" pos="0 0 -0.02905" quat="1 0 0 0" material="motor_material" mesh="motor" />
+        <geom class="visual" pos="0 0 0.02" quat="1 0 0 0" material="pla_cf_structure" mesh="crank" />
+        <geom class="visual" pos="0 0 -0.02905" quat="1 0 0 0" material="anodized_black" mesh="motor" />
         <body name="rod_bearing_shim_subassembly" pos="-0.0176777 -0.0176777 0.0306" quat="0 1 -1.3829e-07 0">
           <inertial pos="-0.021767743 -1.640376e-08 -0.003" mass="0.010274809" fullinertia="2.0945845e-07 4.2309692e-06 4.1817626e-06 0 1.6018711e-07 0" />
           <joint name="left_link_crank_pin" damping="0.01" frictionloss="0.0" axis="0 0 1" type="hinge" armature="0" />
-          <geom class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" material="bearing_8x4x2_material" mesh="bearing_8x4x2" />
-          <geom class="visual" pos="0.0176777 -0.0176777 0.0106" quat="0 1 0 0" material="shim_material" mesh="shim" />
-          <geom class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" material="bearing_8x4x2_2_material" mesh="bearing_8x4x2_2" />
-          <geom class="visual" pos="-0.0435355 0 0.0041" material="link_spacer_material" mesh="link_spacer" />
-          <geom class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" material="link_material" mesh="link" />
-          <geom class="visual" pos="-0.0258579 -0.0176777 0.0029" quat="0 -1 0 0" material="shim_material" mesh="shim" />
-          <geom class="visual" pos="0 0 -0.0101" quat="0 1 0 0" material="link_spacer_material" mesh="link_spacer" />
-          <geom class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" material="bearing_8x4x2_3_material" mesh="bearing_8x4x2_3" />
-          <geom class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" material="bearing_8x4x2_4_material" mesh="bearing_8x4x2_4" />
+          <geom class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" material="steel" mesh="bearing_8x4x2" />
+          <geom class="visual" pos="0.0176777 -0.0176777 0.0106" quat="0 1 0 0" material="steel" mesh="shim" />
+          <geom class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" material="steel" mesh="bearing_8x4x2_2" />
+          <geom class="visual" pos="-0.0435355 0 0.0041" material="pla_cf_structure" mesh="link_spacer" />
+          <geom class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" material="pla_cf_structure" mesh="link" />
+          <geom class="visual" pos="-0.0258579 -0.0176777 0.0029" quat="0 -1 0 0" material="steel" mesh="shim" />
+          <geom class="visual" pos="0 0 -0.0101" quat="0 1 0 0" material="pla_cf_structure" mesh="link_spacer" />
+          <geom class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" material="steel" mesh="bearing_8x4x2_3" />
+          <geom class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" material="steel" mesh="bearing_8x4x2_4" />
           <site name="closing_left_link_finger_pin_2" pos="-0.0435355 0 -0.0079" quat="0 1 0 0" group="3" />
           <site name="closing_left_link_finger_pin_2_z" pos="-0.0435355 0 -0.1079" quat="0 1 0 0" group="3" />
         </body>
         <body name="rod_bearing_shim_subassembly_2" pos="0.0176777 0.0176777 0.0301" quat="0 -1.3829e-07 -1 0">
           <inertial pos="-0.021767743 -1.640376e-08 -0.003" mass="0.010274809" fullinertia="2.0945845e-07 4.2309692e-06 4.1817626e-06 0 1.6018711e-07 0" />
           <joint name="right_link_crank_pin" damping="0.01" frictionloss="0.0" axis="0 0 1" type="hinge" armature="0" />
-          <geom class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 -1 0 0" material="bearing_8x4x2_material" mesh="bearing_8x4x2" />
-          <geom class="visual" pos="0.0176777 -0.0176777 0.0106" quat="0 1 0 0" material="shim_material" mesh="shim" />
-          <geom class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 -1 0 0" material="bearing_8x4x2_2_material" mesh="bearing_8x4x2_2" />
-          <geom class="visual" pos="-0.0435355 0 0.0041" material="link_spacer_material" mesh="link_spacer" />
-          <geom class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" material="link_material" mesh="link" />
-          <geom class="visual" pos="-0.0258579 -0.0176777 0.0029" quat="0 -1 0 0" material="shim_material" mesh="shim" />
-          <geom class="visual" pos="0 0 -0.0101" quat="0 -1 0 0" material="link_spacer_material" mesh="link_spacer" />
-          <geom class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 -1 0 0" material="bearing_8x4x2_3_material" mesh="bearing_8x4x2_3" />
-          <geom class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" material="bearing_8x4x2_4_material" mesh="bearing_8x4x2_4" />
+          <geom class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 -1 0 0" material="steel" mesh="bearing_8x4x2" />
+          <geom class="visual" pos="0.0176777 -0.0176777 0.0106" quat="0 1 0 0" material="steel" mesh="shim" />
+          <geom class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 -1 0 0" material="steel" mesh="bearing_8x4x2_2" />
+          <geom class="visual" pos="-0.0435355 0 0.0041" material="pla_cf_structure" mesh="link_spacer" />
+          <geom class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" material="pla_cf_structure" mesh="link" />
+          <geom class="visual" pos="-0.0258579 -0.0176777 0.0029" quat="0 -1 0 0" material="steel" mesh="shim" />
+          <geom class="visual" pos="0 0 -0.0101" quat="0 -1 0 0" material="pla_cf_structure" mesh="link_spacer" />
+          <geom class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 -1 0 0" material="steel" mesh="bearing_8x4x2_3" />
+          <geom class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" material="steel" mesh="bearing_8x4x2_4" />
           <site name="closing_right_link_finger_pin_2" pos="-0.0435355 0 -0.0084" quat="0 1 0 0" group="3" />
           <site name="closing_right_link_finger_pin_2_z" pos="-0.0435355 0 -0.1084" quat="0 1 0 0" group="3" />
         </body>
@@ -189,10 +159,10 @@
       <body name="left_finger" pos="-0.075 0 0.08405" quat="0.5 0.5 0.5 0.5">
         <inertial pos="-0.00034517389 0.01908037 0.015312358" mass="0.054931748" fullinertia="2.6449963e-05 7.4293339e-06 2.6124026e-05 -3.909154e-07 -1.8589738e-08 -2.1530338e-06" />
         <joint name="left_finger_slide" type="slide" range="0 0.03535533905932738" damping="0.01" axis="0 0 1" frictionloss="0.1" armature="0" />
-        <geom class="visual" pos="0 -0.0065 0" quat="0.707107 -0.707107 0 0" material="mgn9_block_material" mesh="mgn9_block" />
-        <geom class="visual" pos="0 0.0035 0.01445" quat="0.5 -0.5 -0.5 -0.5" material="finger_body_material" mesh="finger_body" />
-        <geom class="visual" pos="0 0.0035 0.01445" quat="0.5 -0.5 -0.5 -0.5" material="finger_mount_material" mesh="finger_mount" />
-        <geom class="visual" pos="0 0.0035 0.01445" quat="0.5 -0.5 -0.5 -0.5" material="finger_brace_material" mesh="finger_brace" />
+        <geom class="visual" pos="0 -0.0065 0" quat="0.707107 -0.707107 0 0" material="steel" mesh="mgn9_block" />
+        <geom class="visual" pos="0 0.0035 0.01445" quat="0.5 -0.5 -0.5 -0.5" material="pla_finger" mesh="finger_body" />
+        <geom class="visual" pos="0 0.0035 0.01445" quat="0.5 -0.5 -0.5 -0.5" material="pla_cf_structure" mesh="finger_mount" />
+        <geom class="visual" pos="0 0.0035 0.01445" quat="0.5 -0.5 -0.5 -0.5" rgba="0.870588 0.313726 0.141176 1" material="pla_cf_structure" mesh="finger_brace" />
         <geom name="left_mgn9_block_back_collision" class="collision" size="0.010001 0.004001 0.014451" pos="0 -0.0005 0.01445" type="box" />
         <geom name="left_finger_body_back_collision" class="collision" size="0.012001 0.0336576 0.0139725" pos="0 0.0421566 0.0154785" type="box" />
         <geom name="left_finger_mount_back_collision" class="collision" size="0.0175877 0.006901 0.015001" pos="-0.00458672 0.0016 0.01445" type="box" />
@@ -202,16 +172,16 @@
         <frame name="left_sensor_mount" pos="0 0.0615 0.03525" quat="0.707107 0 0 0.707107">
           <body name="left_sensor_body" childclass="left_parallel_gripper">
             <inertial pos="-0.0022674886 6.897054e-10 -0.00085107362" mass="0.015" fullinertia="8.0379122e-07 1.121524e-06 1.6757149e-06 0 -2.7169202e-08 0" />
-            <geom class="left_visual" quat="0.5 0.5 0.5 0.5" material="left_pillars_4_material" mesh="left_pillars_4" />
-            <geom class="left_visual" quat="0.5 0.5 0.5 0.5" material="left_pillars_6_material" mesh="left_pillars_6" />
-            <geom class="left_visual" quat="0.5 0.5 0.5 0.5" material="left_housing_material" mesh="left_housing" />
-            <geom class="left_visual" quat="0.5 0.5 0.5 0.5" material="left_pillars_3_material" mesh="left_pillars_3" />
-            <geom class="left_visual" quat="0.5 0.5 0.5 0.5" material="left_pillars_5_material" mesh="left_pillars_5" />
-            <geom class="left_visual" quat="0.5 0.5 0.5 0.5" material="left_pillars_8_material" mesh="left_pillars_8" />
-            <geom class="left_visual" quat="0.5 0.5 0.5 0.5" material="left_pillars_0_material" mesh="left_pillars_0" />
-            <geom class="left_visual" quat="0.5 0.5 0.5 0.5" material="left_pillars_1_material" mesh="left_pillars_1" />
-            <geom class="left_visual" quat="0.5 0.5 0.5 0.5" material="left_pillars_7_material" mesh="left_pillars_7" />
-            <geom class="left_visual" quat="0.5 0.5 0.5 0.5" material="left_pillars_2_material" mesh="left_pillars_2" />
+            <geom class="left_visual" quat="0.5 0.5 0.5 0.5" material="left_silicone" mesh="left_pillars_4" />
+            <geom class="left_visual" quat="0.5 0.5 0.5 0.5" material="left_silicone" mesh="left_pillars_6" />
+            <geom class="left_visual" quat="0.5 0.5 0.5 0.5" material="left_pts_housing" mesh="left_housing" />
+            <geom class="left_visual" quat="0.5 0.5 0.5 0.5" material="left_silicone" mesh="left_pillars_3" />
+            <geom class="left_visual" quat="0.5 0.5 0.5 0.5" material="left_silicone" mesh="left_pillars_5" />
+            <geom class="left_visual" quat="0.5 0.5 0.5 0.5" material="left_silicone" mesh="left_pillars_8" />
+            <geom class="left_visual" quat="0.5 0.5 0.5 0.5" material="left_silicone" mesh="left_pillars_0" />
+            <geom class="left_visual" quat="0.5 0.5 0.5 0.5" material="left_silicone" mesh="left_pillars_1" />
+            <geom class="left_visual" quat="0.5 0.5 0.5 0.5" material="left_silicone" mesh="left_pillars_7" />
+            <geom class="left_visual" quat="0.5 0.5 0.5 0.5" material="left_silicone" mesh="left_pillars_2" />
             <geom name="left_sensor_housing_collision" class="left_collision" size="0.0153 0.012 0.0043" pos="-0.0033 0 -0.0015" type="box" contype="4" />
             <geom name="left_taxel_geom_00" class="left_pillar_collision" size="0.0028" pos="0.007 -0.007 0.0033" />
             <geom name="left_taxel_geom_01" class="left_pillar_collision" size="0.0028" pos="0 -0.007 0.0036" />
@@ -238,10 +208,10 @@
       <body name="right_finger" pos="0.075 0 0.08405" quat="0.5 -0.5 -0.5 0.5">
         <inertial pos="0.00034517389 -0.01908037 0.015312358" mass="0.054931748" fullinertia="2.6449963e-05 7.4293339e-06 2.6124026e-05 -3.909154e-07 1.8589741e-08 2.1530336e-06" />
         <joint name="right_finger_slide" type="slide" range="0 0.03535533905932738" damping="0.01" axis="0 0 1" frictionloss="0.1" armature="0" />
-        <geom class="visual" pos="0 0.0065 0.0289" quat="0.707107 0.707107 0 0" material="mgn9_block_material" mesh="mgn9_block" />
-        <geom class="visual" pos="0 -0.0035 0.01445" quat="0.5 0.5 -0.5 0.5" material="finger_body_material" mesh="finger_body" />
-        <geom class="visual" pos="0 -0.0035 0.01445" quat="0.5 0.5 -0.5 0.5" material="finger_mount_material" mesh="finger_mount" />
-        <geom class="visual" pos="0 -0.0035 0.01445" quat="0.5 0.5 -0.5 0.5" material="finger_brace_material" mesh="finger_brace" />
+        <geom class="visual" pos="0 0.0065 0.0289" quat="0.707107 0.707107 0 0" material="steel" mesh="mgn9_block" />
+        <geom class="visual" pos="0 -0.0035 0.01445" quat="0.5 0.5 -0.5 0.5" material="pla_finger" mesh="finger_body" />
+        <geom class="visual" pos="0 -0.0035 0.01445" quat="0.5 0.5 -0.5 0.5" material="pla_cf_structure" mesh="finger_mount" />
+        <geom class="visual" pos="0 -0.0035 0.01445" quat="0.5 0.5 -0.5 0.5" rgba="0.870588 0.313726 0.141176 1" material="pla_cf_structure" mesh="finger_brace" />
         <geom name="right_mgn9_block_back_collision" class="collision" size="0.010001 0.004001 0.014451" pos="0 0.0005 0.01445" type="box" />
         <geom name="right_finger_body_back_collision" class="collision" size="0.012001 0.0336576 0.0139725" pos="0 -0.0421566 0.0154785" type="box" />
         <geom name="right_finger_mount_back_collision" class="collision" size="0.0175877 0.006901 0.015001" pos="0.00458672 -0.0016 0.01445" type="box" />
@@ -251,16 +221,16 @@
         <frame name="right_sensor_mount" pos="0 -0.0615 0.03525" quat="0.707107 0 0 -0.707107">
           <body name="right_sensor_body" childclass="right_parallel_gripper">
             <inertial pos="-0.0022674886 6.897054e-10 -0.00085107362" mass="0.015" fullinertia="8.0379122e-07 1.121524e-06 1.6757149e-06 0 -2.7169202e-08 0" />
-            <geom class="right_visual" quat="0.5 0.5 0.5 0.5" material="right_pillars_4_material" mesh="right_pillars_4" />
-            <geom class="right_visual" quat="0.5 0.5 0.5 0.5" material="right_pillars_6_material" mesh="right_pillars_6" />
-            <geom class="right_visual" quat="0.5 0.5 0.5 0.5" material="right_housing_material" mesh="right_housing" />
-            <geom class="right_visual" quat="0.5 0.5 0.5 0.5" material="right_pillars_3_material" mesh="right_pillars_3" />
-            <geom class="right_visual" quat="0.5 0.5 0.5 0.5" material="right_pillars_5_material" mesh="right_pillars_5" />
-            <geom class="right_visual" quat="0.5 0.5 0.5 0.5" material="right_pillars_8_material" mesh="right_pillars_8" />
-            <geom class="right_visual" quat="0.5 0.5 0.5 0.5" material="right_pillars_0_material" mesh="right_pillars_0" />
-            <geom class="right_visual" quat="0.5 0.5 0.5 0.5" material="right_pillars_1_material" mesh="right_pillars_1" />
-            <geom class="right_visual" quat="0.5 0.5 0.5 0.5" material="right_pillars_7_material" mesh="right_pillars_7" />
-            <geom class="right_visual" quat="0.5 0.5 0.5 0.5" material="right_pillars_2_material" mesh="right_pillars_2" />
+            <geom class="right_visual" quat="0.5 0.5 0.5 0.5" material="right_silicone" mesh="right_pillars_4" />
+            <geom class="right_visual" quat="0.5 0.5 0.5 0.5" material="right_silicone" mesh="right_pillars_6" />
+            <geom class="right_visual" quat="0.5 0.5 0.5 0.5" material="right_pts_housing" mesh="right_housing" />
+            <geom class="right_visual" quat="0.5 0.5 0.5 0.5" material="right_silicone" mesh="right_pillars_3" />
+            <geom class="right_visual" quat="0.5 0.5 0.5 0.5" material="right_silicone" mesh="right_pillars_5" />
+            <geom class="right_visual" quat="0.5 0.5 0.5 0.5" material="right_silicone" mesh="right_pillars_8" />
+            <geom class="right_visual" quat="0.5 0.5 0.5 0.5" material="right_silicone" mesh="right_pillars_0" />
+            <geom class="right_visual" quat="0.5 0.5 0.5 0.5" material="right_silicone" mesh="right_pillars_1" />
+            <geom class="right_visual" quat="0.5 0.5 0.5 0.5" material="right_silicone" mesh="right_pillars_7" />
+            <geom class="right_visual" quat="0.5 0.5 0.5 0.5" material="right_silicone" mesh="right_pillars_2" />
             <geom name="right_sensor_housing_collision" class="right_collision" size="0.0153 0.012 0.0043" pos="-0.0033 0 -0.0015" type="box" contype="4" />
             <geom name="right_taxel_geom_00" class="right_pillar_collision" size="0.0028" pos="0.007 -0.007 0.0033" />
             <geom name="right_taxel_geom_01" class="right_pillar_collision" size="0.0028" pos="0 -0.007 0.0036" />
@@ -287,8 +257,8 @@
       <frame name="camera_mount_frame">
         <body name="cam_camera_assembly" childclass="cam_parallel_gripper">
           <inertial pos="0.0093327739 -0.070144724 0.011918795" mass="0.090955175" fullinertia="9.1184005e-06 4.3310111e-05 4.3051886e-05 1.371648e-06 -1.8641238e-06 1.6184879e-06" />
-          <geom class="cam_visual" pos="0 0 0.007" quat="1 0 0 0" material="cam_camera_mount_material" mesh="cam_camera_mount" />
-          <geom class="cam_visual" pos="0.0125 -0.0685273 0.0279714" quat="0 0 -0.121869 -0.992546" material="cam_d435i_solid_material" mesh="cam_d435i_solid" />
+          <geom class="cam_visual" pos="0 0 0.007" quat="1 0 0 0" material="cam_pla_cf_structure" mesh="cam_camera_mount" />
+          <geom class="cam_visual" pos="0.0125 -0.0685273 0.0279714" quat="0 0 -0.121869 -0.992546" material="cam_aluminum" mesh="cam_d435i_solid" />
           <geom name="cam_camera_mount_collision" class="cam_collision" size="0.0325 0.021501 0.00554334" pos="0.012501 -0.064 0.000542339" type="box" />
           <geom name="cam_d435i_housing_collision" class="cam_collision" size="0.045001 0.0125011 0.012526" pos="0.0125 -0.0715575 0.0158185" quat="0 0 -0.121869 -0.992546" type="box" />
           <site name="cam_d435i_bottom_screw_frame" pos="0.0125 -0.0600032 0.01049" quat="0.557208 0.435339 -0.435339 0.557208" group="4" />

@@ -1,0 +1,114 @@
+materials:
+  pla_finger:
+    rgba: [0.98823529, 0.4, 0.15686275, 1]
+    specular: 0.12
+    shininess: 0.18
+    reflectance: 0
+  pla_cf_structure:
+    rgba: [0.14117647, 0.26666667, 0.62352941, 1]
+    specular: 0.075
+    shininess: 0.12
+    reflectance: 0
+  steel:
+    rgba: [0.68235294, 0.70980392, 0.7372549, 1]
+    specular: 0.76
+    shininess: 0.78
+    reflectance: 0.13
+  anodized_black:
+    rgba: [0.2, 0.21960784, 0.24313725, 1]
+    specular: 0.42
+    shininess: 0.52
+    reflectance: 0.025
+  pts_housing:
+    rgba: [0.16078431, 0.16862745, 0.19607843, 1]
+    specular: 0.33
+    shininess: 0.4
+    reflectance: 0.015
+  silicone:
+    rgba: [0.83529412, 0.79215686, 0.80784314, 1]
+    specular: 0.085
+    shininess: 0.12
+    reflectance: 0
+  aluminum:
+    rgba: [0.71764706, 0.72156863, 0.71372549, 1]
+    specular: 0.59
+    shininess: 0.62
+    reflectance: 0.075
+  rubber_pad:
+    rgba: [0.20392157, 0.21568627, 0.23137255, 1]
+    specular: 0.055
+    shininess: 0.09
+    reflectance: 0
+mesh_classes:
+  finger_body: pla_finger
+  franka_adapter: pla_cf_structure
+  motor_mount: pla_cf_structure
+  bracket_2: pla_cf_structure
+  camera_mount: pla_cf_structure
+  crank: pla_cf_structure
+  link: pla_cf_structure
+  link_spacer: pla_cf_structure
+  finger_mount: pla_cf_structure
+  finger_brace: pla_cf_structure
+  mgn9_rail: steel
+  mgn9_block: steel
+  bearing_8x4x2: steel
+  bearing_8x4x2_2: steel
+  bearing_8x4x2_3: steel
+  bearing_8x4x2_4: steel
+  shim: steel
+  stator: anodized_black
+  motor: anodized_black
+  housing: pts_housing
+  pillars_0: silicone
+  pillars_1: silicone
+  pillars_2: silicone
+  pillars_3: silicone
+  pillars_4: silicone
+  pillars_5: silicone
+  pillars_6: silicone
+  pillars_7: silicone
+  pillars_8: silicone
+  d435i_solid: aluminum
+  pad_visual: rubber_pad
+smooth_meshes: [bearing_8x4x2, bearing_8x4x2_2, bearing_8x4x2_3, bearing_8x4x2_4,
+  stator, motor, pillars_0, pillars_1, pillars_2, pillars_3, pillars_4, pillars_5,
+  pillars_6, pillars_7, pillars_8, d435i_solid]
+presets:
+  realistic:
+    mesh_rgba:
+      finger_brace: [0.87058824, 0.31372549, 0.14117647, 1]
+  cad:
+    base_rgba: [0.5, 0.5, 0.5, 1]
+    mesh_rgba:
+      bearing_8x4x2: [0.8, 0.8, 0.8, 1.0]
+      bearing_8x4x2_2: [0.8, 0.8, 0.8, 1.0]
+      bearing_8x4x2_3: [0.8, 0.8, 0.8, 1.0]
+      bearing_8x4x2_4: [0.8, 0.8, 0.8, 1.0]
+      bracket_2: [0.917647, 0.917647, 0.917647, 1.0]
+      camera_mount: [0.917647, 0.917647, 0.917647, 1.0]
+      crank: [0.615686, 0.811765, 0.929412, 1.0]
+      d435i_solid: [0.796078, 0.823529, 0.937255, 1.0]
+      finger_body: [0.972549, 0.529412, 0.00392157, 1.0]
+      finger_brace: [0.231373, 0.380392, 0.705882, 1.0]
+      finger_mount: [0.615686, 0.811765, 0.929412, 1.0]
+      franka_adapter: [0.647059, 0.647059, 0.647059, 1.0]
+      housing: [0.627451, 0.627451, 0.627451, 1.0]
+      link: [0.231373, 0.380392, 0.705882, 1.0]
+      link_spacer: [0.615686, 0.811765, 0.929412, 1.0]
+      mgn9_block: [0.647059, 0.647059, 0.647059, 1.0]
+      mgn9_rail: [0.6, 0.6, 0.6, 1.0]
+      motor: [0.647059, 0.647059, 0.647059, 1.0]
+      motor_mount: [0.615686, 0.811765, 0.929412, 1.0]
+      pad_visual: [0.25, 0.27, 0.3, 1]
+      pillars_0: [1.0, 0.0, 1.0, 1.0]
+      pillars_1: [1.0, 0.0, 1.0, 1.0]
+      pillars_2: [1.0, 0.0, 1.0, 1.0]
+      pillars_3: [1.0, 0.0, 1.0, 1.0]
+      pillars_4: [1.0, 0.0, 1.0, 1.0]
+      pillars_5: [1.0, 0.0, 1.0, 1.0]
+      pillars_6: [1.0, 0.0, 1.0, 1.0]
+      pillars_7: [1.0, 0.0, 1.0, 1.0]
+      pillars_8: [1.0, 0.0, 1.0, 1.0]
+      shim: [0.647059, 0.647059, 0.647059, 1.0]
+      stator: [0.34902, 0.376471, 0.4, 1.0]

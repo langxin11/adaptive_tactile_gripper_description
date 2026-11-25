@@ -23,12 +23,19 @@ import mujoco
 import numpy as np
 import yaml
 
-ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_EXPORT_DIR = ROOT / "tools" / "onshape_export"
-PACKAGE_NAME = "adaptive_tactile_gripper_description"
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from adaptive_tactile_gripper_description.appearance import Appearance, is_visual, read_appearance
 from adaptive_tactile_gripper_description.assembly import _add_module_contact_exclusions
+from adaptive_tactile_gripper_description.component_mass import (
+    BASE_FASTENERS_MASS_KG,
+    FINGER_FASTENERS_MASS_KG,
+    MF84_BEARING_MASS_KG,
+    MGN9_RAIL_150MM_MASS_KG,
+    MGN9C_BLOCK_MASS_KG,
+    MOTOR_FASTENERS_MASS_KG,
+    ROD_SPACER_HARDWARE_MASS_KG,
+)
 from adaptive_tactile_gripper_description.kinematics import (
     CRANK_RADIUS_M,
     LINK_LENGTH_M,
@@ -42,6 +49,10 @@ from adaptive_tactile_gripper_description.kinematics import (
     drive_angle_for_closure,
     get_joint_positions,
 )
+
+ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_EXPORT_DIR = ROOT / "tools" / "onshape_export"
+PACKAGE_NAME = "adaptive_tactile_gripper_description"
 
 FULL_OPEN_MOUNT_GAP_M = 0.0795
 TIP_PROTRUSION_M = 0.0066
@@ -97,17 +108,10 @@ DM4310P_STATOR_MASS_KG = 0.2820
 DM4310P_ROTOR_OUTPUT_MASS_KG = 0.0480
 
 # HIWIN MGN9R (150mm, 0.38 kg/m) 与 MGN9C (28.9mm 短滑块)
-MGN9_RAIL_150MM_MASS_KG = 0.0570
-MGN9C_BLOCK_MASS_KG = 0.0160
 
 # 连杆五金（单根）：4x NSK MF84 (0.44 g) + 2x link_spacer/销轴/垫片 (4.76 g)
-MF84_BEARING_MASS_KG = 0.00044
-ROD_SPACER_HARDWARE_MASS_KG = 0.00476  # 2*link_spacer + 2*shim + 1*M3x5
 
 # 机内 A2-70 不锈钢紧固件（ISO 4762 / ISO 4032）
-BASE_FASTENERS_MASS_KG = 4 * 0.00227 + 8 * 0.00082 + 11 * 0.00097  # 4x M4x16 + 8x M4螺母 + 11x M3x12 = 26.31g
-MOTOR_FASTENERS_MASS_KG = 4 * 0.00068  # 4x M3x5 = 2.72g
-FINGER_FASTENERS_MASS_KG = 3 * 0.00188  # 单指 3x M3x30 = 5.64g
 
 # Contactile PTS 2.0 单只 3x3 传感头（中空铝壳 + Shore-A40 硅胶膜柱 + 内置相机/LED PCB）
 PTS_2_0_MASS_KG = 0.0150
@@ -255,10 +259,14 @@ def _part_from_mesh(
     p = np.asarray(pos, dtype=float)
     com_parent = p + R @ com_local
     i_parent = R @ i_local @ R.T
-    return InertialPart(name=name, mass_kg=float(mass_kg), com_m=com_parent, inertia_com_kg_m2=i_parent)
+    return InertialPart(
+        name=name, mass_kg=float(mass_kg), com_m=com_parent, inertia_com_kg_m2=i_parent
+    )
 
 
-def _point_part(name: str, mass_kg: float, pos: list[float], diag_inertia: list[float] | None = None) -> InertialPart:
+def _point_part(
+    name: str, mass_kg: float, pos: list[float], diag_inertia: list[float] | None = None
+) -> InertialPart:
     """构造紧固件等小零件的等效惯量块。"""
     i_mat = np.diag(diag_inertia if diag_inertia is not None else [1e-8, 1e-8, 1e-8]).astype(float)
     return InertialPart(
@@ -278,7 +286,9 @@ def _combine_inertials(parts: list[InertialPart]) -> tuple[float, np.ndarray, np
     I_total = np.zeros((3, 3), dtype=float)
     for p in parts:
         d = p.com_m - com
-        I_total += p.inertia_com_kg_m2 + p.mass_kg * (float(np.dot(d, d)) * np.eye(3) - np.outer(d, d))
+        I_total += p.inertia_com_kg_m2 + p.mass_kg * (
+            float(np.dot(d, d)) * np.eye(3) - np.outer(d, d)
+        )
     I_total = 0.5 * (I_total + I_total.T)
     eigs = np.linalg.eigvalsh(I_total)
     if np.any(eigs <= 0.0):
@@ -300,7 +310,9 @@ def _fullinertia_str(I_mat: np.ndarray) -> str:
     )
 
 
-def _set_inertial_element(body_el: ET.Element, mass_kg: float, com: np.ndarray, I_mat: np.ndarray) -> None:
+def _set_inertial_element(
+    body_el: ET.Element, mass_kg: float, com: np.ndarray, I_mat: np.ndarray
+) -> None:
     """替换或创建 body 下的 <inertial> 标签。"""
     old = body_el.find("inertial")
     if old is not None:
@@ -334,8 +346,14 @@ def _solve_print_fill_ratio(raw_root: ET.Element, meshes_dir: Path) -> tuple[flo
         ("finger_mount", 2),
         ("finger_brace", 2),
     ]
-    solid_pla_kg = sum(_stl_polyhedral_props(meshes_dir / f"{m}.stl")[0] * RAW_DENSITY_PLA_KG_M3 * n for m, n in pla_meshes)
-    solid_placf_kg = sum(_stl_polyhedral_props(meshes_dir / f"{m}.stl")[0] * RAW_DENSITY_PLACF_KG_M3 * n for m, n in placf_meshes)
+    solid_pla_kg = sum(
+        _stl_polyhedral_props(meshes_dir / f"{m}.stl")[0] * RAW_DENSITY_PLA_KG_M3 * n
+        for m, n in pla_meshes
+    )
+    solid_placf_kg = sum(
+        _stl_polyhedral_props(meshes_dir / f"{m}.stl")[0] * RAW_DENSITY_PLACF_KG_M3 * n
+        for m, n in placf_meshes
+    )
 
     standard_no_cam_kg = (
         DM4310P_STATOR_MASS_KG
@@ -379,7 +397,9 @@ def _write_xml(root: ET.Element, path: Path) -> None:
     path.write_bytes(xml_bytes + b"\n")
 
 
-def _copy_and_rename_meshes(raw_root: ET.Element, raw_assets_dir: Path, out_meshes_dir: Path) -> set[str]:
+def _copy_and_rename_meshes(
+    raw_root: ET.Element, raw_assets_dir: Path, out_meshes_dir: Path
+) -> set[str]:
     """仅复制被引用且映射的网格文件到 meshes/ 并返回规范网格名集合。"""
     out_meshes_dir.mkdir(parents=True, exist_ok=True)
     for stale in out_meshes_dir.glob("*.stl"):
@@ -400,17 +420,12 @@ def _copy_and_rename_meshes(raw_root: ET.Element, raw_assets_dir: Path, out_mesh
     return referenced
 
 
-def _rename_mesh_and_material_refs(elem: ET.Element) -> None:
-    """将元素树内的旧 mesh/material 名称映射为纯 ASCII 规范名。"""
+def _rename_mesh_refs(elem: ET.Element) -> None:
+    """将元素树内的旧网格名称映射为纯 ASCII 规范名。"""
     for node in elem.iter():
         mesh = node.get("mesh")
         if mesh and mesh in MESH_NAME_MAP:
             node.set("mesh", MESH_NAME_MAP[mesh])
-        mat = node.get("material")
-        if mat and mat.endswith("_material"):
-            base = mat[: -len("_material")]
-            if base in MESH_NAME_MAP:
-                node.set("material", f"{MESH_NAME_MAP[base]}_material")
 
 
 def _build_default_section(for_chassis: bool = True) -> ET.Element:
@@ -440,20 +455,36 @@ def _build_default_section(for_chassis: bool = True) -> ET.Element:
 
 
 def _add_collision_box(
-    body: ET.Element, name: str, pos: list[float], size: list[float], quat: list[float] | None = None,
+    body: ET.Element,
+    name: str,
+    pos: list[float],
+    size: list[float],
+    quat: list[float] | None = None,
 ) -> ET.Element:
     """在指定刚体下添加碰撞盒，尺寸为半长。"""
-    geom = ET.SubElement(body, "geom", {
-        "name": name, "class": "collision", "type": "box", "pos": _fmt_vec(pos), "size": _fmt_vec(size),
-    })
+    geom = ET.SubElement(
+        body,
+        "geom",
+        {
+            "name": name,
+            "class": "collision",
+            "type": "box",
+            "pos": _fmt_vec(pos),
+            "size": _fmt_vec(size),
+        },
+    )
     if quat is not None:
         geom.set("quat", _fmt_vec(quat))
     return geom
 
 
 def _add_bounding_box(
-    body: ET.Element, name: str, vertices: np.ndarray,
-    *, pos: np.ndarray | None = None, quat: list[float] | None = None,
+    body: ET.Element,
+    name: str,
+    vertices: np.ndarray,
+    *,
+    pos: np.ndarray | None = None,
+    quat: list[float] | None = None,
 ) -> None:
     """在顶点所在坐标系拟合盒子，再将其写入父刚体系。"""
     lower, upper = vertices.min(axis=0), vertices.max(axis=0)
@@ -466,35 +497,74 @@ def _add_bounding_box(
     _add_collision_box(body, name, center, (upper - lower) / 2 + 1e-6, quat)
 
 
-def _collect_materials(raw_root: ET.Element) -> dict[str, str]:
-    """提取原始材质 RGBA 字典，键为规范化材质名。"""
-    materials: dict[str, str] = {}
-    for mat_el in raw_root.findall("./asset/material"):
-        name = mat_el.get("name", "")
-        rgba = mat_el.get("rgba", "0.7 0.7 0.7 1")
-        if name.endswith("_material"):
-            stem = name[: -len("_material")]
-            if stem in MESH_NAME_MAP:
-                materials[f"{MESH_NAME_MAP[stem]}_material"] = rgba
-    return materials
+def _build_appearance_library(raw_root: ET.Element, out_root: Path) -> dict:
+    """按原始视觉几何实际引用的材质采集 CAD 色，保留平垫的设计色。"""
+    path = out_root / "config" / "appearance.yaml"
+    library = read_appearance(path if path.is_file() else ROOT / "config" / "appearance.yaml")
+    raw_colors = {
+        mat.attrib["name"]: mat.attrib["rgba"] for mat in raw_root.findall("asset/material")
+    }
+    colors = {"pad_visual": library["presets"]["cad"]["mesh_rgba"]["pad_visual"]}
+    for geom in raw_root.findall(".//worldbody//geom[@class='visual']"):
+        mesh = MESH_NAME_MAP[geom.attrib["mesh"]]
+        if mesh not in library["mesh_classes"]:
+            raise ValueError(f"视觉网格 {mesh!r} 缺少材质类别映射")
+        color = [float(x) for x in raw_colors[geom.attrib["material"]].split()]
+        if colors.setdefault(mesh, color) != color:
+            raise ValueError(f"网格 {mesh!r} 的多个实例使用了不同的 CAD 色")
+    library["presets"]["cad"]["mesh_rgba"] = dict(
+        sorted((library["presets"]["cad"]["mesh_rgba"] | colors).items())
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    # 映射逐行输出，颜色向量保持在一行，方便核对导出差异。
+    class LibraryDumper(yaml.SafeDumper):
+        """以行内列表保存材质向量。"""
+
+    LibraryDumper.add_representer(
+        list,
+        lambda dumper, seq: dumper.represent_sequence(
+            "tag:yaml.org,2002:seq",
+            seq,
+            flow_style=True,
+        ),
+    )
+    path.write_text(yaml.dump(library, Dumper=LibraryDumper, sort_keys=False), encoding="utf-8")
+    return library
 
 
-def _make_asset_block(mesh_names: list[str], materials: dict[str, str]) -> ET.Element:
-    """按给定网格列表构造 <asset> 块。"""
-    asset = ET.Element("asset")
-    for m in sorted(set(mesh_names)):
-        ET.SubElement(asset, "mesh", {"name": m, "file": f"{m}.stl"})
-    for m in sorted(set(mesh_names)):
-        mat_name = f"{m}_material"
-        if mat_name in materials:
-            ET.SubElement(asset, "material", {"name": mat_name, "rgba": materials[mat_name]})
-    return asset
+def _add_visual_assets(root: ET.Element, appearance: Appearance) -> None:
+    """为模组添加所引用的网格、曲面法线和语义材质。"""
+    asset = ET.SubElement(root, "asset")
+    meshes = {geom.attrib["mesh"] for geom in root.findall(".//worldbody//geom[@mesh]")}
+    for mesh in sorted(meshes):
+        element = ET.SubElement(asset, "mesh", name=mesh, file=f"{mesh}.stl")
+        if mesh in appearance.smooth_meshes:
+            element.set("smoothnormal", "true")
+    # 内置模组在生成时显式标记视觉几何，按配置原始精度写入交付 XML。
+    used = set()
+    for geom in root.findall(".//worldbody//geom"):
+        if geom.get("class") != "visual" and geom.get("group") != "2":
+            continue
+        mesh = geom.get("mesh") or geom.attrib["name"]
+        category = appearance.category(mesh)
+        used.add(category)
+        geom.set("material", category)
+        geom.attrib.pop("rgba", None)
+        if mesh in appearance.mesh_rgba:
+            geom.set("rgba", " ".join(map(str, appearance.mesh_rgba[mesh])))
+    for category in sorted(used):
+        material = ET.SubElement(asset, "material", name=category)
+        for key, value in appearance.material_attributes(category).items():
+            material.set(key, " ".join(map(str, value)) if key == "rgba" else str(value))
 
 
 def _extract_sensor_mount_world_mats(raw_root: ET.Element) -> tuple[np.ndarray, np.ndarray]:
     """计算左、右 sensor_mount 在导出初始零位下的世界变换矩阵。"""
     left_body = raw_root.find(".//body[@name='ls__mgn9_block__6faf12bd810aab5c7f7b6a160ef20d75']")
-    right_body = raw_root.find(".//body[@name='ls__mgn9_block__6faf12bd810aab5c7f7b6a160ef20d75_2']")
+    right_body = raw_root.find(
+        ".//body[@name='ls__mgn9_block__6faf12bd810aab5c7f7b6a160ef20d75_2']"
+    )
     if left_body is None or right_body is None:
         raise ValueError("raw_gripper.xml 缺少左右滑块 body")
 
@@ -516,7 +586,7 @@ def _extract_sensor_mount_world_mats(raw_root: ET.Element) -> tuple[np.ndarray, 
 
 
 def _build_pts_2_0_mjcf(
-    raw_root: ET.Element, materials: dict[str, str], meshes_dir: Path, out_path: Path
+    raw_root: ET.Element, appearance: Appearance, meshes_dir: Path, out_path: Path
 ) -> list[dict[str, object]]:
     """生成模块化传感器 mjcf/sensors/pts_2_0.xml（视觉保留网格，碰撞优先用 9 球体）。"""
     T_left_mount, _ = _extract_sensor_mount_world_mats(raw_root)
@@ -529,16 +599,22 @@ def _build_pts_2_0_mjcf(
     )
 
     root = ET.Element("mujoco", {"model": "pts_2_0"})
-    ET.SubElement(root, "compiler", {"angle": "radian", "meshdir": "../../meshes", "autolimits": "true"})
+    ET.SubElement(
+        root, "compiler", {"angle": "radian", "meshdir": "../../meshes", "autolimits": "true"}
+    )
     root.append(_build_default_section(for_chassis=False))
     worldbody = ET.SubElement(root, "worldbody")
     sensor_body = ET.SubElement(
         worldbody,
         "body",
-        {"name": "sensor_body", "pos": "0 0 0", "quat": "1 0 0 0", "childclass": "parallel_gripper"},
+        {
+            "name": "sensor_body",
+            "pos": "0 0 0",
+            "quat": "1 0 0 0",
+            "childclass": "parallel_gripper",
+        },
     )
 
-    used_meshes: list[str] = []
     inertial_parts: list[InertialPart] = []
     housing_part: InertialPart | None = None
     for geom in left_body.findall("geom"):
@@ -563,10 +639,8 @@ def _build_pts_2_0_mjcf(
                 "pos": _fmt_vec(rel_pos_list),
                 "quat": _fmt_vec(rel_quat_list),
                 "mesh": mesh,
-                "material": f"{mesh}_material",
             },
         )
-        used_meshes.append(mesh)
         if mesh == "housing":
             # Contactile PTS 2.0 单只传感头总重 15.0 g（外壳+PCB ~13.0 g，硅胶柱阵列 ~2.0 g）
             housing_part = _part_from_mesh(
@@ -579,7 +653,10 @@ def _build_pts_2_0_mjcf(
             inertial_parts.append(housing_part)
 
     housing = _add_collision_box(
-        sensor_body, "sensor_housing_collision", [-0.0033, 0, -0.0015], [0.0153, 0.012, 0.0043],
+        sensor_body,
+        "sensor_housing_collision",
+        [-0.0033, 0, -0.0015],
+        [0.0153, 0.012, 0.0043],
     )
     # 保留与默认环境几何的接触，避免越过指间接触端点后壳体与对侧柱头或平垫发生附加碰撞。
     housing.set("contype", "4")
@@ -624,21 +701,29 @@ def _build_pts_2_0_mjcf(
             )
             r = 0.0028
             i_sph = 0.4 * silicone_mass_each * r * r
-            inertial_parts.append(_point_part(f"pillar_{idx}", silicone_mass_each, pos_list, [i_sph, i_sph, i_sph]))
+            inertial_parts.append(
+                _point_part(f"pillar_{idx}", silicone_mass_each, pos_list, [i_sph, i_sph, i_sph])
+            )
             taxels_spec.append({"row": row, "col": col, "pos_m": pos_list, "radius_m": 0.0028})
 
-    ET.SubElement(sensor_body, "site", {
-        "name": "fingertip", "group": "4", "pos": _fmt_vec([0, 0, TIP_PROTRUSION_M]),
-    })
+    ET.SubElement(
+        sensor_body,
+        "site",
+        {
+            "name": "fingertip",
+            "group": "4",
+            "pos": _fmt_vec([0, 0, TIP_PROTRUSION_M]),
+        },
+    )
     mass_pts, com_pts, I_pts = _combine_inertials(inertial_parts)
     _set_inertial_element(sensor_body, mass_pts, com_pts, I_pts)
 
-    root.append(_make_asset_block(used_meshes, materials))
+    _add_visual_assets(root, appearance)
     _write_xml(root, out_path)
     return taxels_spec
 
 
-def _build_flat_pad_mjcf(out_path: Path) -> None:
+def _build_flat_pad_mjcf(appearance: Appearance, out_path: Path) -> None:
     """生成无触觉平垫占位模组 mjcf/sensors/flat_pad.xml。"""
     root = ET.Element("mujoco", {"model": "flat_pad"})
     ET.SubElement(root, "compiler", {"angle": "radian", "autolimits": "true"})
@@ -647,7 +732,12 @@ def _build_flat_pad_mjcf(out_path: Path) -> None:
     body = ET.SubElement(
         worldbody,
         "body",
-        {"name": "sensor_body", "pos": "0 0 0", "quat": "1 0 0 0", "childclass": "parallel_gripper"},
+        {
+            "name": "sensor_body",
+            "pos": "0 0 0",
+            "quat": "1 0 0 0",
+            "childclass": "parallel_gripper",
+        },
     )
     m = FLAT_PAD_MASS_KG
     sx, sy, sz = 0.024, 0.024, 0.0066
@@ -670,7 +760,6 @@ def _build_flat_pad_mjcf(out_path: Path) -> None:
             "contype": "0",
             "conaffinity": "0",
             "group": "2",
-            "rgba": "0.25 0.27 0.30 1",
         },
     )
     ET.SubElement(
@@ -689,13 +778,22 @@ def _build_flat_pad_mjcf(out_path: Path) -> None:
         "site",
         {"group": "3", "name": "pad_center", "pos": "0 0 0.0066", "quat": "0 1 0 0"},
     )
-    ET.SubElement(body, "site", {
-        "name": "fingertip", "group": "4", "pos": _fmt_vec([0, 0, TIP_PROTRUSION_M]),
-    })
+    ET.SubElement(
+        body,
+        "site",
+        {
+            "name": "fingertip",
+            "group": "4",
+            "pos": _fmt_vec([0, 0, TIP_PROTRUSION_M]),
+        },
+    )
+    _add_visual_assets(root, appearance)
     _write_xml(root, out_path)
 
 
-def _compute_d435i_frames(cam_pos: list[float], cam_quat: list[float]) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+def _compute_d435i_frames(
+    cam_pos: list[float], cam_quat: list[float]
+) -> dict[str, tuple[np.ndarray, np.ndarray]]:
     """计算与 Intel realsense2_description (_d435i.urdf.xacro) 一致的 D435i 标准坐标帧（位于 base 系下）。
 
     d435i_solid.stl 局部坐标原点位于前玻璃面板中心，+z_m 朝镜头外。
@@ -721,7 +819,9 @@ def _compute_d435i_frames(cam_pos: list[float], cam_quat: list[float]) -> dict[s
     T_link[:3, :3] = R_ros_base
     T_link[:3, 3] = T_stl[:3, 3] + R_stl @ np.array([0.0175, 0.0, -0.0043], dtype=float)
 
-    def _offset_ros(dx: float, dy: float, dz: float, optical: bool = False) -> tuple[np.ndarray, np.ndarray]:
+    def _offset_ros(
+        dx: float, dy: float, dz: float, optical: bool = False
+    ) -> tuple[np.ndarray, np.ndarray]:
         pos = T_link[:3, 3] + R_ros_base @ np.array([dx, dy, dz], dtype=float)
         if optical:
             # ROS 光学坐标系：+Z_opt = +X_ros, +X_opt = -Y_ros, +Y_opt = -Z_ros
@@ -753,7 +853,7 @@ def _compute_d435i_frames(cam_pos: list[float], cam_quat: list[float]) -> dict[s
 
 def _build_realsense_d435i_mjcf(
     raw_root: ET.Element,
-    materials: dict[str, str],
+    appearance: Appearance,
     meshes_dir: Path,
     rho_placf: float,
     out_path: Path,
@@ -761,20 +861,26 @@ def _build_realsense_d435i_mjcf(
     """生成对齐官方 D435i 参数的 mjcf/accessories/realsense_d435i.xml。"""
     raw_base = raw_root.find(".//body[@name='base_assembly']")
     root = ET.Element("mujoco", {"model": "realsense_d435i"})
-    ET.SubElement(root, "compiler", {"angle": "radian", "meshdir": "../../meshes", "autolimits": "true"})
+    ET.SubElement(
+        root, "compiler", {"angle": "radian", "meshdir": "../../meshes", "autolimits": "true"}
+    )
     root.append(_build_default_section(for_chassis=False))
     worldbody = ET.SubElement(root, "worldbody")
     body = ET.SubElement(
         worldbody,
         "body",
-        {"name": "camera_assembly", "pos": "0 0 0", "quat": "1 0 0 0", "childclass": "parallel_gripper"},
+        {
+            "name": "camera_assembly",
+            "pos": "0 0 0",
+            "quat": "1 0 0 0",
+            "childclass": "parallel_gripper",
+        },
     )
 
     cam_mount_pos = [0.0, 0.0, 0.007]
     cam_mount_quat = [1.0, 0.0, 0.0, 0.0]
     cam_pos = [0.0, -0.0685273, 0.0279714]
     cam_quat = [0.0, 0.0, -0.121869, -0.992546]
-    used_meshes: list[str] = []
     for geom in raw_base.findall("geom"):
         if geom.get("class") != "visual":
             continue
@@ -798,10 +904,8 @@ def _build_realsense_d435i_mjcf(
                 "pos": pos,
                 "quat": quat,
                 "mesh": mesh,
-                "material": f"{mesh}_material",
             },
         )
-        used_meshes.append(mesh)
 
     # 估计相机模组惯量（PLA-CF 支架、72 g 裸机和支架紧固件）
     R_stl = _quat_wxyz_to_mat(cam_quat)
@@ -811,11 +915,18 @@ def _build_realsense_d435i_mjcf(
     d435i_I_stl = R_iquat @ np.diag(D435I_DIAGINERTIA_LOCAL) @ R_iquat.T
     d435i_I_base = R_stl @ d435i_I_stl @ R_stl.T
     mount_vertices = _stl_triangles(meshes_dir / "camera_mount.stl").reshape(-1, 3)
-    _add_bounding_box(body, "camera_mount_collision", mount_vertices, pos=cam_mount_pos, quat=cam_mount_quat)
+    _add_bounding_box(
+        body, "camera_mount_collision", mount_vertices, pos=cam_mount_pos, quat=cam_mount_quat
+    )
     camera_vertices = _stl_triangles(meshes_dir / "d435i_solid.stl").reshape(-1, 3)
     nominal_corners = [[-0.045, -0.0125, -0.02505], [0.045, 0.0125, 0]]
-    _add_bounding_box(body, "d435i_housing_collision", np.vstack((camera_vertices, nominal_corners)),
-                      pos=p_stl, quat=cam_quat)
+    _add_bounding_box(
+        body,
+        "d435i_housing_collision",
+        np.vstack((camera_vertices, nominal_corners)),
+        pos=p_stl,
+        quat=cam_quat,
+    )
     cam_parts = [
         _part_from_mesh(
             "camera_mount",
@@ -865,14 +976,14 @@ def _build_realsense_d435i_mjcf(
             },
         )
 
-    root.append(_make_asset_block(used_meshes, materials))
+    _add_visual_assets(root, appearance)
     _write_xml(root, out_path)
     return {"mass_kg": cam_mass}
 
 
 def _build_chassis_mjcf(
     raw_root: ET.Element,
-    materials: dict[str, str],
+    appearance: Appearance,
     meshes_dir: Path,
     rho_pla: float,
     rho_placf: float,
@@ -880,7 +991,9 @@ def _build_chassis_mjcf(
 ) -> dict[str, float]:
     """生成以实测整机总质量约束惯量估计的纯夹爪底盘 MJCF。"""
     root = ET.Element("mujoco", {"model": "parallel_gripper"})
-    ET.SubElement(root, "compiler", {"angle": "radian", "meshdir": "../meshes", "autolimits": "true"})
+    ET.SubElement(
+        root, "compiler", {"angle": "radian", "meshdir": "../meshes", "autolimits": "true"}
+    )
     root.append(_build_default_section(for_chassis=True))
 
     worldbody = ET.SubElement(root, "worldbody")
@@ -892,7 +1005,6 @@ def _build_chassis_mjcf(
     )
     ET.SubElement(base, "freejoint", {"name": "base_freejoint"})
 
-    used_meshes: list[str] = []
     base_parts: list[InertialPart] = []
 
     base_mesh_masses = {
@@ -909,11 +1021,10 @@ def _build_chassis_mjcf(
             continue
         cls = geom.get("class", "visual")
         g_el = ET.fromstring(ET.tostring(geom))
-        _rename_mesh_and_material_refs(g_el)
+        _rename_mesh_refs(g_el)
         if cls == "visual":
             base.append(g_el)
             canon = g_el.get("mesh", "")
-            used_meshes.append(canon)
             mode, val = base_mesh_masses[canon]
             p = _parse_vec(g_el.get("pos"), [0, 0, 0])
             q = _parse_vec(g_el.get("quat"), [1, 0, 0, 0])
@@ -929,10 +1040,17 @@ def _build_chassis_mjcf(
             )
 
     base_radius = 0.045
-    ET.SubElement(base, "geom", {
-        "name": "base_collision", "class": "collision", "type": "cylinder",
-        "pos": "0 0 0.03", "size": _fmt_vec([base_radius, 0.031]),
-    })
+    ET.SubElement(
+        base,
+        "geom",
+        {
+            "name": "base_collision",
+            "class": "collision",
+            "type": "cylinder",
+            "pos": "0 0 0.03",
+            "size": _fmt_vec([base_radius, 0.031]),
+        },
+    )
     _add_collision_box(base, "rail_bridge_collision", [0, 0, 0.071], [0.079, 0.038, 0.014])
     # 转接板凸耳超出底座圆柱。纳入整片跨界三角形，让盒子与圆柱连续搭接。
     adapter = base.find("geom[@mesh='franka_adapter']")
@@ -956,7 +1074,7 @@ def _build_chassis_mjcf(
     # 拷贝并改造 motor 与两根连杆子装配体
     raw_motor = raw_root.find(".//body[@name='motor']")
     motor = ET.fromstring(ET.tostring(raw_motor))
-    _rename_mesh_and_material_refs(motor)
+    _rename_mesh_refs(motor)
 
     motor_parts: list[InertialPart] = []
     for geom in list(motor.findall("geom")):
@@ -964,16 +1082,23 @@ def _build_chassis_mjcf(
             motor.remove(geom)
         else:
             canon = geom.get("mesh", "")
-            used_meshes.append(canon)
             p = _parse_vec(geom.get("pos"), [0, 0, 0])
             q = _parse_vec(geom.get("quat"), [1, 0, 0, 0])
             if canon == "motor":
                 motor_parts.append(
-                    _part_from_mesh("motor_output", meshes_dir / "motor.stl", p, q, mass_kg=DM4310P_ROTOR_OUTPUT_MASS_KG)
+                    _part_from_mesh(
+                        "motor_output",
+                        meshes_dir / "motor.stl",
+                        p,
+                        q,
+                        mass_kg=DM4310P_ROTOR_OUTPUT_MASS_KG,
+                    )
                 )
             elif canon == "crank":
                 motor_parts.append(
-                    _part_from_mesh("crank", meshes_dir / "crank.stl", p, q, density_kg_m3=rho_placf)
+                    _part_from_mesh(
+                        "crank", meshes_dir / "crank.stl", p, q, density_kg_m3=rho_placf
+                    )
                 )
     motor_parts.append(_point_part("motor_fasteners", MOTOR_FASTENERS_MASS_KG, [0.0, 0.0, 0.022]))
     motor_mass, motor_com, motor_I = _combine_inertials(motor_parts)
@@ -990,16 +1115,19 @@ def _build_chassis_mjcf(
                 rod.remove(geom)
             else:
                 canon = geom.get("mesh", "")
-                used_meshes.append(canon)
                 p = _parse_vec(geom.get("pos"), [0, 0, 0])
                 q = _parse_vec(geom.get("quat"), [1, 0, 0, 0])
                 if canon == "link":
                     rod_parts.append(
-                        _part_from_mesh("link", meshes_dir / "link.stl", p, q, density_kg_m3=rho_placf)
+                        _part_from_mesh(
+                            "link", meshes_dir / "link.stl", p, q, density_kg_m3=rho_placf
+                        )
                     )
                 elif canon.startswith("bearing_"):
                     rod_parts.append(
-                        _part_from_mesh(canon, meshes_dir / f"{canon}.stl", p, q, mass_kg=MF84_BEARING_MASS_KG)
+                        _part_from_mesh(
+                            canon, meshes_dir / f"{canon}.stl", p, q, mass_kg=MF84_BEARING_MASS_KG
+                        )
                     )
                 elif canon == "link_spacer":
                     spacer_idx += 1
@@ -1089,7 +1217,7 @@ def _build_chassis_mjcf(
         raw_finger = raw_root.find(f".//body[@name='{raw_name}']")
         finger = ET.fromstring(ET.tostring(raw_finger))
         finger.set("name", new_name)
-        _rename_mesh_and_material_refs(finger)
+        _rename_mesh_refs(finger)
 
         jnt = finger.find("joint")
         jnt.set("frictionloss", "0.1")
@@ -1103,23 +1231,30 @@ def _build_chassis_mjcf(
             if geom.get("class") != "visual" or mesh == "housing" or mesh.startswith("pillars_"):
                 finger.remove(geom)
             else:
-                used_meshes.append(mesh)
                 p = _parse_vec(geom.get("pos"), [0, 0, 0])
                 q = _parse_vec(geom.get("quat"), [1, 0, 0, 0])
                 if mesh == "mgn9_block":
                     finger_parts.append(
-                        _part_from_mesh(mesh, meshes_dir / f"{mesh}.stl", p, q, mass_kg=MGN9C_BLOCK_MASS_KG)
+                        _part_from_mesh(
+                            mesh, meshes_dir / f"{mesh}.stl", p, q, mass_kg=MGN9C_BLOCK_MASS_KG
+                        )
                     )
                 elif mesh == "finger_body":
                     finger_parts.append(
-                        _part_from_mesh(mesh, meshes_dir / f"{mesh}.stl", p, q, density_kg_m3=rho_pla)
+                        _part_from_mesh(
+                            mesh, meshes_dir / f"{mesh}.stl", p, q, density_kg_m3=rho_pla
+                        )
                     )
                 else:
                     finger_parts.append(
-                        _part_from_mesh(mesh, meshes_dir / f"{mesh}.stl", p, q, density_kg_m3=rho_placf)
+                        _part_from_mesh(
+                            mesh, meshes_dir / f"{mesh}.stl", p, q, density_kg_m3=rho_placf
+                        )
                     )
 
-        finger_parts.append(_point_part(f"{new_name}_fasteners", FINGER_FASTENERS_MASS_KG, fast_pos))
+        finger_parts.append(
+            _point_part(f"{new_name}_fasteners", FINGER_FASTENERS_MASS_KG, fast_pos)
+        )
         fm, fcom, fI = _combine_inertials(finger_parts)
         _set_inertial_element(finger, fm, fcom, fI)
         finger_masses.append(fm)
@@ -1156,7 +1291,7 @@ def _build_chassis_mjcf(
             _add_bounding_box(finger, f"{side}_{mesh}_back_collision", vertices)
         base.append(finger)
 
-    root.append(_make_asset_block(used_meshes, materials))
+    _add_visual_assets(root, appearance)
 
     actuator = ET.SubElement(root, "actuator")
     ET.SubElement(
@@ -1179,11 +1314,14 @@ def _build_chassis_mjcf(
     equality = ET.SubElement(root, "equality")
     # 使用刚体锚点定义闭环，同时保留站点用于核对闭环误差。
     for side, rod_name in (
-        ("left", "rod_bearing_shim_subassembly"), ("right", "rod_bearing_shim_subassembly_2"),
+        ("left", "rod_bearing_shim_subassembly"),
+        ("right", "rod_bearing_shim_subassembly_2"),
     ):
         finger = base.find(f"body[@name='{side}_finger']")
         for suffix in ("", "_z"):
-            anchor = finger.find(f"site[@name='closing_{side}_link_finger_pin_1{suffix}']").get("pos")
+            anchor = finger.find(f"site[@name='closing_{side}_link_finger_pin_1{suffix}']").get(
+                "pos"
+            )
             ET.SubElement(
                 equality,
                 "connect",
@@ -1228,7 +1366,9 @@ def _assemble_single_mjcf(
         s_spec = mujoco.MjSpec.from_file(str(s_path))
         spec.attach(s_spec, prefix=f"{side}_", frame=spec.frame(f"{side}_sensor_mount"))
 
-    _add_module_contact_exclusions(spec, left_sensor_path is not None, right_sensor_path is not None, camera_path is not None)
+    _add_module_contact_exclusions(
+        spec, left_sensor_path is not None, right_sensor_path is not None, camera_path is not None
+    )
     spec.compile()
     root = ET.fromstring(spec.to_xml())
     base = root.find(".//body[@name='base']")
@@ -1281,9 +1421,14 @@ def _compute_composite_payload_in_base(mjcf_path: Path, q_drive: float) -> dict[
 
     actual = {name: float(d.joint(name).qpos[0]) for name in target}
     max_site_error = max(
-        float(np.linalg.norm(d.site(f"closing_{side}_link_finger_pin_1{suffix}").xpos
-                             - d.site(f"closing_{side}_link_finger_pin_2{suffix}").xpos))
-        for side in ("left", "right") for suffix in ("", "_z")
+        float(
+            np.linalg.norm(
+                d.site(f"closing_{side}_link_finger_pin_1{suffix}").xpos
+                - d.site(f"closing_{side}_link_finger_pin_2{suffix}").xpos
+            )
+        )
+        for side in ("left", "right")
+        for suffix in ("", "_z")
     )
     if max_site_error > 1e-6 or d.ncon:
         raise ValueError(f"静态负载构型无效：闭环残差 {max_site_error:.3g} m，接触数 {d.ncon}")
@@ -1315,8 +1460,12 @@ def _compute_composite_payload_in_base(mjcf_path: Path, q_drive: float) -> dict[
         "right_finger_slide_m": actual["right_finger_slide"],
         "drive_error_rad": actual["gripper_drive"] - q_drive,
         "max_closure_error_m": max_site_error,
-        "max_angular_speed_rad_s": float(max(abs(d.joint(name).qvel[0]) for name in target if not name.endswith("_slide"))),
-        "max_slide_speed_m_s": float(max(abs(d.joint(name).qvel[0]) for name in target if name.endswith("_slide"))),
+        "max_angular_speed_rad_s": float(
+            max(abs(d.joint(name).qvel[0]) for name in target if not name.endswith("_slide"))
+        ),
+        "max_slide_speed_m_s": float(
+            max(abs(d.joint(name).qvel[0]) for name in target if name.endswith("_slide"))
+        ),
         "mass_kg": round(total_mass, 6),
         "F_x_Cee_m": [round(float(v), 6) for v in com_b],
         "F_I_ee_kg_m2": [[round(float(x), 8) for x in row] for row in I_total],
@@ -1351,7 +1500,9 @@ def _build_urdf_xacros(
         if pad_back:
             backwards = -0.5 * relative[:3, 2]
             xyz = [
-                f"${{{coord} + ({number(delta)}) * safety_distance}}" if abs(delta) > 1e-14 else coord
+                f"${{{coord} + ({number(delta)}) * safety_distance}}"
+                if abs(delta) > 1e-14
+                else coord
                 for coord, delta in zip(xyz, backwards, strict=True)
             ]
         rpy = " ".join(map(number, _mat_to_rpy(relative[:3, :3])))
@@ -1363,9 +1514,14 @@ def _build_urdf_xacros(
             values = element.get("fullinertia").split()
         else:
             values = element.get("diaginertia").split() + ["0", "0", "0"]
-        tensor = " ".join(f'{key}="{value}"' for key, value in zip(
-            ("ixx", "iyy", "izz", "ixy", "ixz", "iyz"), values, strict=True,
-        ))
+        tensor = " ".join(
+            f'{key}="{value}"'
+            for key, value in zip(
+                ("ixx", "iyy", "izz", "ixy", "ixz", "iyz"),
+                values,
+                strict=True,
+            )
+        )
         return f'''      <inertial>
         {origin(body_pose, body_pose @ pose(element))}
         <mass value="{element.get("mass")}"/>
@@ -1373,7 +1529,9 @@ def _build_urdf_xacros(
       </inertial>
 '''
 
-    def link_geometry(root: ET.Element, body: ET.Element, body_pose: np.ndarray, prefix: str) -> str:
+    def link_geometry(
+        root: ET.Element, body: ET.Element, body_pose: np.ndarray, prefix: str
+    ) -> str:
         materials = {item.get("name"): item.get("rgba") for item in root.findall("asset/material")}
         meshes = {item.get("name"): item.get("file") for item in root.findall("asset/mesh")}
         xml = inertial(body, body_pose)
@@ -1382,7 +1540,9 @@ def _build_urdf_xacros(
             tag = "visual" if visual else "collision"
             name = geom.get("name")
             shape = geom.get("type")
-            pad_back = name == "sensor_housing_collision" or (name or "").endswith("_back_collision")
+            pad_back = name == "sensor_housing_collision" or (name or "").endswith(
+                "_back_collision"
+            )
             pad_all = not visual and not pad_back and geom.get("class") == "collision"
             geom_pose = origin(body_pose, body_pose @ pose(geom), pad_back=pad_back)
             dims = _parse_vec(geom.get("size"), [])
@@ -1392,12 +1552,16 @@ def _build_urdf_xacros(
             elif shape == "box":
                 size = [number(2 * value) for value in dims]
                 if pad_all or pad_back:
-                    size = [f"${{{value} + {1 if pad_back and idx == 2 else 2} * safety_distance}}"
-                            for idx, value in enumerate(size)]
+                    size = [
+                        f"${{{value} + {1 if pad_back and idx == 2 else 2} * safety_distance}}"
+                        for idx, value in enumerate(size)
+                    ]
                 geometry = f'<box size="{" ".join(size)}"/>'
             elif shape == "cylinder":
-                geometry = (f'<cylinder radius="${{{number(dims[0])} + safety_distance}}" '
-                            f'length="${{{number(2 * dims[1])} + 2 * safety_distance}}"/>')
+                geometry = (
+                    f'<cylinder radius="${{{number(dims[0])} + safety_distance}}" '
+                    f'length="${{{number(2 * dims[1])} + 2 * safety_distance}}"/>'
+                )
             elif shape == "sphere":
                 geometry = f'<sphere radius="{number(dims[0])}"/>'
             else:
@@ -1405,15 +1569,22 @@ def _build_urdf_xacros(
             name_attr = f' name="${{{prefix}}}_{name}"' if name else ""
             xml += f"      <{tag}{name_attr}>\n        {geom_pose}\n        <geometry>{geometry}</geometry>\n"
             if visual:
-                material = geom.get("material", name)
-                rgba = materials.get(material, geom.get("rgba"))
-                xml += f'        <material name="{material}"><color rgba="{rgba}"/></material>\n'
+                material = geom.attrib["material"]
+                rgba = geom.get("rgba", materials[material])
+                if "rgba" in geom.attrib:
+                    material += "__" + geom.get("mesh", name)
+                xml += f'        <material name="${{{prefix}}}_{material}"><color rgba="{rgba}"/></material>\n'
             xml += f"      </{tag}>\n"
         return xml
 
     def joint(
-        name: str, parent: str, child: str, parent_pose: np.ndarray, child_pose: np.ndarray,
-        kind: str = "fixed", extra: str = "",
+        name: str,
+        parent: str,
+        child: str,
+        parent_pose: np.ndarray,
+        child_pose: np.ndarray,
+        kind: str = "fixed",
+        extra: str = "",
     ) -> str:
         return f'''    <joint name="{name}" type="{kind}">
       <parent link="{parent}"/>
@@ -1423,7 +1594,11 @@ def _build_urdf_xacros(
 '''
 
     def frame(
-        name: str, parent: str, child: str, parent_pose: np.ndarray, child_pose: np.ndarray,
+        name: str,
+        parent: str,
+        child: str,
+        parent_pose: np.ndarray,
+        child_pose: np.ndarray,
     ) -> str:
         return joint(name, parent, child, parent_pose, child_pose) + f'    <link name="{child}"/>\n'
 
@@ -1439,34 +1614,66 @@ def _build_urdf_xacros(
         body_pose = pose(body)
         sensor = "${prefix}_sensor_link"
         fingertip = "${prefix}_fingertip"
-        xml = xml_start + f'  <xacro:macro name="{name}_sensor" params="prefix parent safety_distance:=0.0">\n'
+        xml = (
+            xml_start
+            + f'  <xacro:macro name="{name}_sensor" params="prefix parent safety_distance:=0.0">\n'
+        )
         xml += joint("${prefix}_sensor_joint", "${parent}", sensor, identity, body_pose)
         xml += f'    <link name="{sensor}">\n{link_geometry(root, body, body_pose, "prefix")}    </link>\n'
-        xml += frame("${prefix}_fingertip_joint", sensor, fingertip, body_pose, body_pose @ pose(body.find("site[@name='fingertip']")))
+        xml += frame(
+            "${prefix}_fingertip_joint",
+            sensor,
+            fingertip,
+            body_pose,
+            body_pose @ pose(body.find("site[@name='fingertip']")),
+        )
         (urdf_dir / "sensors" / f"{name}.xacro").write_text(xml + xml_end, encoding="utf-8")
 
     camera_root = ET.parse(camera_xml).getroot()
     camera = camera_root.find("worldbody/body")
     camera_pose = pose(camera)
     mount = "${ns}_camera_mount_link"
-    xml = xml_start + '  <xacro:macro name="realsense_d435i_mount" params="ns parent safety_distance:=0.0 use_nominal_extrinsics:=true">\n'
+    xml = (
+        xml_start
+        + '  <xacro:macro name="realsense_d435i_mount" params="ns parent safety_distance:=0.0 use_nominal_extrinsics:=true">\n'
+    )
     xml += joint("${ns}_camera_mount_joint", "${parent}", mount, identity, camera_pose)
     xml += f'    <link name="{mount}">\n{link_geometry(camera_root, camera, camera_pose, "ns")}    </link>\n'
     camera_sites = {site.get("name"): camera_pose @ pose(site) for site in camera.findall("site")}
     screw = "d435i_bottom_screw_frame"
     camera_link = "d435i_link"
-    xml += frame("${ns}_d435i_bottom_screw_joint", mount, f"${{ns}}_{screw}", camera_pose, camera_sites[screw])
-    xml += frame("${ns}_d435i_link_joint", f"${{ns}}_{screw}", f"${{ns}}_{camera_link}",
-                 camera_sites[screw], camera_sites[camera_link])
+    xml += frame(
+        "${ns}_d435i_bottom_screw_joint",
+        mount,
+        f"${{ns}}_{screw}",
+        camera_pose,
+        camera_sites[screw],
+    )
+    xml += frame(
+        "${ns}_d435i_link_joint",
+        f"${{ns}}_{screw}",
+        f"${{ns}}_{camera_link}",
+        camera_sites[screw],
+        camera_sites[camera_link],
+    )
     xml += '    <xacro:if value="${use_nominal_extrinsics}">\n'
     nominal_camera_links = []
     for name, child_pose in camera_sites.items():
         if name in (screw, camera_link):
             continue
-        parent = name.replace("_optical_frame", "_frame") if name.endswith("_optical_frame") else camera_link
+        parent = (
+            name.replace("_optical_frame", "_frame")
+            if name.endswith("_optical_frame")
+            else camera_link
+        )
         name_joint = name.removesuffix("_frame") + "_joint"
-        subtree = frame(f"${{ns}}_{name_joint}", f"${{ns}}_{parent}", f"${{ns}}_{name}",
-                        camera_sites[parent], child_pose)
+        subtree = frame(
+            f"${{ns}}_{name_joint}",
+            f"${{ns}}_{parent}",
+            f"${{ns}}_{name}",
+            camera_sites[parent],
+            child_pose,
+        )
         xml += "".join("  " + line for line in subtree.splitlines(keepends=True))
         nominal_camera_links.append(name)
     xml += "    </xacro:if>\n"
@@ -1475,7 +1682,9 @@ def _build_urdf_xacros(
     chassis = ET.parse(chassis_xml).getroot()
     base = chassis.find("worldbody/body")
     base_pose = pose(base)
-    xml = xml_start + '''  <!-- URDF 使用开链描述。连杆位姿由闭环关节状态同步。 -->
+    xml = (
+        xml_start
+        + """  <!-- URDF 使用开链描述。连杆位姿由闭环关节状态同步。 -->
   <xacro:macro name="adaptive_tactile_gripper_chassis"
                params="ns:='panda_gripper' connected_to:='' xyz:='0 0 0' rpy:='0 0 0'
                        safety_distance:=0.0">
@@ -1486,7 +1695,8 @@ def _build_urdf_xacros(
         <origin xyz="${xyz}" rpy="${rpy}"/>
       </joint>
     </xacro:unless>
-'''
+"""
+    )
     chassis_links = ["base"]
     chassis_joints = []
 
@@ -1510,26 +1720,44 @@ def _build_urdf_xacros(
             else:
                 lower, upper = "0", number(POSITION_MAX_RAD)
                 effort, velocity = "4", "40"
-            extra = (f'      <axis xyz="{axis}"/>\n'
-                     f'      <limit lower="{lower}" upper="{upper}" effort="{effort}" velocity="{velocity}"/>\n')
+            extra = (
+                f'      <axis xyz="{axis}"/>\n'
+                f'      <limit lower="{lower}" upper="{upper}" effort="{effort}" velocity="{velocity}"/>\n'
+            )
             if name == "right_finger":
-                extra += '      <mimic joint="${ns}_left_finger_slide" multiplier="1" offset="0"/>\n'
+                extra += (
+                    '      <mimic joint="${ns}_left_finger_slide" multiplier="1" offset="0"/>\n'
+                )
             result += joint(f"${{ns}}_{jname}", parent, link, parent_pose, body_pose, kind, extra)
         result += f'    <link name="{link}">\n{link_geometry(chassis, body, body_pose, "ns")}    </link>\n'
         for child in body.findall("body"):
             result += export_body(child, link, body_pose)
         for element in body.findall("frame"):
             frame_name = element.get("name")
-            joint_name = "camera_frame_joint" if frame_name == "camera_mount_frame" else f"{frame_name}_joint"
+            joint_name = (
+                "camera_frame_joint"
+                if frame_name == "camera_mount_frame"
+                else f"{frame_name}_joint"
+            )
             chassis_links.append(frame_name)
-            result += frame(f"${{ns}}_{joint_name}", link, f"${{ns}}_{frame_name}",
-                            body_pose, body_pose @ pose(element))
+            result += frame(
+                f"${{ns}}_{joint_name}",
+                link,
+                f"${{ns}}_{frame_name}",
+                body_pose,
+                body_pose @ pose(element),
+            )
         return result
 
     xml += export_body(base, "", identity)
     (urdf_dir / "gripper_chassis.xacro").write_text(xml + xml_end, encoding="utf-8")
-    tcp_frame = frame("${ns}_tcp_joint", "${ns}_base", "${ns}_tcp",
-                      base_pose, base_pose @ pose(base.find("site[@name='tcp']")))
+    tcp_frame = frame(
+        "${ns}_tcp_joint",
+        "${ns}_base",
+        "${ns}_tcp",
+        base_pose,
+        base_pose @ pose(base.find("site[@name='tcp']")),
+    )
 
     # 5. gripper.xacro
     top_xacro = f"""<?xml version="1.0" encoding="utf-8"?>
@@ -1600,9 +1828,13 @@ def _build_urdf_xacros(
         return "".join(f'{" " * indent}<{tag} name="${{ns}}_{name}"/>\n' for name in names)
 
     chassis_links.append("tcp")
-    fixed_joints = [f"{name}_joint" for name in chassis_links if name.endswith("_mount") or name == "tcp"]
+    fixed_joints = [
+        f"{name}_joint" for name in chassis_links if name.endswith("_mount") or name == "tcp"
+    ]
     fixed_joints.append("camera_frame_joint")
-    nominal_camera_joints = [name.removesuffix("_frame") + "_joint" for name in nominal_camera_links]
+    nominal_camera_joints = [
+        name.removesuffix("_frame") + "_joint" for name in nominal_camera_links
+    ]
     srdf_xacro = """<?xml version="1.0" encoding="utf-8"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="adaptive_tactile_gripper_srdf">
   <xacro:macro name="adaptive_tactile_gripper_srdf"
@@ -1610,7 +1842,9 @@ def _build_urdf_xacros(
                        left_sensor:='pts_2_0' right_sensor:='pts_2_0' use_nominal_extrinsics:=true">
     <group name="${ns}">
 """
-    srdf_xacro += group_members(chassis_joints + fixed_joints, "joint") + group_members(chassis_links, "link")
+    srdf_xacro += group_members(chassis_joints + fixed_joints, "joint") + group_members(
+        chassis_links, "link"
+    )
     for side in ("left", "right"):
         srdf_xacro += f"""      <xacro:if value="${{{side}_sensor in ('pts_2_0', 'flat_pad')}}">
 """
@@ -1618,7 +1852,9 @@ def _build_urdf_xacros(
         srdf_xacro += group_members([f"{side}_sensor_link", f"{side}_fingertip"], "link", 8)
         srdf_xacro += "      </xacro:if>\n"
     srdf_xacro += '      <xacro:if value="${with_camera}">\n'
-    srdf_xacro += group_members(["camera_mount_joint", "d435i_bottom_screw_joint", "d435i_link_joint"], "joint", 8)
+    srdf_xacro += group_members(
+        ["camera_mount_joint", "d435i_bottom_screw_joint", "d435i_link_joint"], "joint", 8
+    )
     srdf_xacro += group_members(["camera_mount_link", screw, camera_link], "link", 8)
     srdf_xacro += '        <xacro:if value="${use_nominal_extrinsics}">\n'
     srdf_xacro += group_members(nominal_camera_joints, "joint", 10)
@@ -1631,14 +1867,26 @@ def _build_urdf_xacros(
       <joint name="${ns}_left_finger_slide"/>
     </group>
 """
-    for name in ("right_finger_slide", "gripper_drive", "left_link_crank_pin", "right_link_crank_pin"):
+    for name in (
+        "right_finger_slide",
+        "gripper_drive",
+        "left_link_crank_pin",
+        "right_link_crank_pin",
+    ):
         srdf_xacro += f'    <passive_joint name="${{ns}}_{name}"/>\n'
 
     for state, closure in (("open", 0.0), ("close", SRDF_CLOSE_M)):
         positions = get_joint_positions(drive_angle_for_closure(closure))
         srdf_xacro += f'\n    <group_state name="{state}" group="${{ns}}">\n'
-        for name in ("left_finger_slide", "gripper_drive", "left_link_crank_pin", "right_link_crank_pin"):
-            srdf_xacro += f'      <joint name="${{ns}}_{name}" value="{number(positions[name])}"/>\n'
+        for name in (
+            "left_finger_slide",
+            "gripper_drive",
+            "left_link_crank_pin",
+            "right_link_crank_pin",
+        ):
+            srdf_xacro += (
+                f'      <joint name="${{ns}}_{name}" value="{number(positions[name])}"/>\n'
+            )
         srdf_xacro += "    </group_state>\n"
         srdf_xacro += f'''    <group_state name="{state}" group="${{ns}}_motion">
       <joint name="${{ns}}_left_finger_slide" value="{number(closure)}"/>
@@ -1789,8 +2037,8 @@ actuator:
 camera:
   model: Intel RealSense D435i
   bare_camera_mass_kg: {D435I_BARE_MASS_KG:.4f}
-  mount_and_fasteners_mass_kg: {float(cam_info['mass_kg']) - D435I_BARE_MASS_KG:.6f}
-  total_module_mass_kg: {float(cam_info['mass_kg']):.6f}
+  mount_and_fasteners_mass_kg: {float(cam_info["mass_kg"]) - D435I_BARE_MASS_KG:.6f}
+  total_module_mass_kg: {float(cam_info["mass_kg"]):.6f}
   inertia_source: https://github.com/google-deepmind/mujoco_menagerie/blob/eea4c7431b63da8278b0ff31638e0b0e941cec0e/realsense_d435i/d435i.xml
   # realsense2_description 来自 realsense-ros v4.58.4。
   extrinsics_source: https://github.com/realsenseai/realsense-ros/blob/c8fac23cec47bb18544810f96bc1668edaec0d08/realsense2_description/urdf/_d435i.urdf.xacro
@@ -1812,16 +2060,16 @@ materials_and_mass_budget:
   effective_pla_density_kg_m3: {round(rho_pla, 2)}
   effective_placf_density_kg_m3: {round(rho_placf, 2)}
   breakdown_kg:
-    base_body: {round(chassis_masses['base_kg'], 6)}
-    motor_and_crank_body: {round(chassis_masses['motor_kg'], 6)}
-    left_rod_assembly: {round(chassis_masses['left_rod_kg'], 6)}
-    right_rod_assembly: {round(chassis_masses['right_rod_kg'], 6)}
-    left_finger_chassis: {round(chassis_masses['left_finger_kg'], 6)}
-    right_finger_chassis: {round(chassis_masses['right_finger_kg'], 6)}
+    base_body: {round(chassis_masses["base_kg"], 6)}
+    motor_and_crank_body: {round(chassis_masses["motor_kg"], 6)}
+    left_rod_assembly: {round(chassis_masses["left_rod_kg"], 6)}
+    right_rod_assembly: {round(chassis_masses["right_rod_kg"], 6)}
+    left_finger_chassis: {round(chassis_masses["left_finger_kg"], 6)}
+    right_finger_chassis: {round(chassis_masses["right_finger_kg"], 6)}
     left_pts_2_0: {PTS_2_0_MASS_KG:.6f}
     right_pts_2_0: {PTS_2_0_MASS_KG:.6f}
     total_without_camera: {round(total_no_cam, 6)}
-    realsense_d435i_module: {round(float(cam_info['mass_kg']), 6)}
+    realsense_d435i_module: {round(float(cam_info["mass_kg"]), 6)}
     total_with_camera: {round(total_with_cam, 6)}
     optional_flange_m6x12_bolts_x4: 0.02049
 
@@ -1868,7 +2116,9 @@ default_configuration:
         pts_lines.append(
             f"  - {{row: {item['row']}, col: {item['col']}, pos_m: {item['pos_m']}, radius_m: {item['radius_m']}}}"
         )
-    (config_dir / "sensors" / "pts_2_0.yaml").write_text("\n".join(pts_lines) + "\n", encoding="utf-8")
+    (config_dir / "sensors" / "pts_2_0.yaml").write_text(
+        "\n".join(pts_lines) + "\n", encoding="utf-8"
+    )
 
     flat_yaml = f"""# 无触觉平垫占位模组规格（用于消融对比或纯视觉抓取）
 name: flat_pad
@@ -1885,7 +2135,7 @@ contact:
     (config_dir / "sensors" / "flat_pad.yaml").write_text(flat_yaml, encoding="utf-8")
 
 
-def build_all(export_dir: Path, out_root: Path) -> None:
+def build_all(export_dir: Path, out_root: Path, appearance: str = "realistic") -> None:
     """从 Onshape 导出结果构建完整模块化夹爪描述资产。"""
     raw_xml = export_dir / "raw_gripper.xml"
     raw_assets = export_dir / "assets"
@@ -1895,8 +2145,8 @@ def build_all(export_dir: Path, out_root: Path) -> None:
     raw_data = raw_xml.read_bytes()
     raw_root = ET.fromstring(raw_data)
     meshes_dir = out_root / "meshes"
+    palette = Appearance.from_library(_build_appearance_library(raw_root, out_root), appearance)
     _copy_and_rename_meshes(raw_root, raw_assets, meshes_dir)
-    materials = _collect_materials(raw_root)
 
     phi_print, rho_pla, rho_placf = _solve_print_fill_ratio(raw_root, meshes_dir)
 
@@ -1906,10 +2156,12 @@ def build_all(export_dir: Path, out_root: Path) -> None:
     flat_path = mjcf_dir / "sensors" / "flat_pad.xml"
     cam_path = mjcf_dir / "accessories" / "realsense_d435i.xml"
 
-    chassis_masses = _build_chassis_mjcf(raw_root, materials, meshes_dir, rho_pla, rho_placf, chassis_path)
-    taxels_spec = _build_pts_2_0_mjcf(raw_root, materials, meshes_dir, pts_path)
-    _build_flat_pad_mjcf(flat_path)
-    cam_info = _build_realsense_d435i_mjcf(raw_root, materials, meshes_dir, rho_placf, cam_path)
+    chassis_masses = _build_chassis_mjcf(
+        raw_root, palette, meshes_dir, rho_pla, rho_placf, chassis_path
+    )
+    taxels_spec = _build_pts_2_0_mjcf(raw_root, palette, meshes_dir, pts_path)
+    _build_flat_pad_mjcf(palette, flat_path)
+    cam_info = _build_realsense_d435i_mjcf(raw_root, palette, meshes_dir, rho_placf, cam_path)
 
     full_xml = mjcf_dir / "gripper.xml"
     nocam_xml = mjcf_dir / "gripper_no_camera.xml"
@@ -1921,7 +2173,9 @@ def build_all(export_dir: Path, out_root: Path) -> None:
     payload_with_cam_open = _compute_composite_payload_in_base(full_xml, 0.0)
     payload_with_cam_mid = _compute_composite_payload_in_base(full_xml, 0.75)
 
-    _build_urdf_xacros(chassis_path, pts_path, flat_path, cam_path, out_root / "urdf", out_root / "srdf")
+    _build_urdf_xacros(
+        chassis_path, pts_path, flat_path, cam_path, out_root / "urdf", out_root / "srdf"
+    )
     _write_specs(
         taxels_spec,
         phi_print,
@@ -1939,13 +2193,31 @@ def build_all(export_dir: Path, out_root: Path) -> None:
         _read_export_microversion(export_dir),
     )
 
+    _validate_module_appearances(mjcf_dir, palette)
+
+
+def _validate_module_appearances(mjcf_dir: Path, palette: Appearance) -> None:
+    """只读核对全部可发现模组的视觉网格与原语。"""
+    # MjSpec 会解析默认类与 childclass 继承，校验过程仅访问内存中的几何。
+    for directory in (mjcf_dir / "sensors", mjcf_dir / "accessories"):
+        for path in sorted(directory.glob("*.xml")):
+            module = mujoco.MjSpec.from_file(str(path))
+            for geom in module.geoms:
+                if is_visual(geom):
+                    key = geom.meshname or geom.name
+                    if palette.mesh_classes.get(key) not in palette.materials:
+                        raise ValueError(f"{path}：视觉件 {key!r} 缺少有效的材质类别映射")
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="构建模块化夹爪描述仓库资产。")
     parser.add_argument("--export-dir", type=Path, default=DEFAULT_EXPORT_DIR)
     parser.add_argument("--out-root", type=Path, default=ROOT)
+    parser.add_argument(
+        "--appearance", choices=("realistic", "cad"), default="realistic", help="生成资产的外观预设"
+    )
     args = parser.parse_args()
-    build_all(args.export_dir, args.out_root)
+    build_all(args.export_dir, args.out_root, args.appearance)
     print(f"已完成模块化资产构建：{args.out_root}")
     return 0
 

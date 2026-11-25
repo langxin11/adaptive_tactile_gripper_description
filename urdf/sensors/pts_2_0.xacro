@@ -15,52 +15,52 @@
       <visual>
         <origin xyz="0 0 0" rpy="1.57079632679 0 1.57079632679"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/pillars_4.stl"/></geometry>
-        <material name="pillars_4_material"><color rgba="1 0 1 1"/></material>
+        <material name="${prefix}_silicone"><color rgba="0.83529412 0.79215686 0.80784314 1"/></material>
       </visual>
       <visual>
         <origin xyz="0 0 0" rpy="1.57079632679 0 1.57079632679"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/pillars_6.stl"/></geometry>
-        <material name="pillars_6_material"><color rgba="1 0 1 1"/></material>
+        <material name="${prefix}_silicone"><color rgba="0.83529412 0.79215686 0.80784314 1"/></material>
       </visual>
       <visual>
         <origin xyz="0 0 0" rpy="1.57079632679 0 1.57079632679"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/housing.stl"/></geometry>
-        <material name="housing_material"><color rgba="0.627451 0.627451 0.627451 1"/></material>
+        <material name="${prefix}_pts_housing"><color rgba="0.16078431 0.16862745 0.19607843 1"/></material>
       </visual>
       <visual>
         <origin xyz="0 0 0" rpy="1.57079632679 0 1.57079632679"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/pillars_3.stl"/></geometry>
-        <material name="pillars_3_material"><color rgba="1 0 1 1"/></material>
+        <material name="${prefix}_silicone"><color rgba="0.83529412 0.79215686 0.80784314 1"/></material>
       </visual>
       <visual>
         <origin xyz="0 0 0" rpy="1.57079632679 0 1.57079632679"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/pillars_5.stl"/></geometry>
-        <material name="pillars_5_material"><color rgba="1 0 1 1"/></material>
+        <material name="${prefix}_silicone"><color rgba="0.83529412 0.79215686 0.80784314 1"/></material>
       </visual>
       <visual>
         <origin xyz="0 0 0" rpy="1.57079632679 0 1.57079632679"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/pillars_8.stl"/></geometry>
-        <material name="pillars_8_material"><color rgba="1 0 1 1"/></material>
+        <material name="${prefix}_silicone"><color rgba="0.83529412 0.79215686 0.80784314 1"/></material>
       </visual>
       <visual>
         <origin xyz="0 0 0" rpy="1.57079632679 0 1.57079632679"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/pillars_0.stl"/></geometry>
-        <material name="pillars_0_material"><color rgba="1 0 1 1"/></material>
+        <material name="${prefix}_silicone"><color rgba="0.83529412 0.79215686 0.80784314 1"/></material>
       </visual>
       <visual>
         <origin xyz="0 0 0" rpy="1.57079632679 0 1.57079632679"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/pillars_1.stl"/></geometry>
-        <material name="pillars_1_material"><color rgba="1 0 1 1"/></material>
+        <material name="${prefix}_silicone"><color rgba="0.83529412 0.79215686 0.80784314 1"/></material>
       </visual>
       <visual>
         <origin xyz="0 0 0" rpy="1.57079632679 0 1.57079632679"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/pillars_7.stl"/></geometry>
-        <material name="pillars_7_material"><color rgba="1 0 1 1"/></material>
+        <material name="${prefix}_silicone"><color rgba="0.83529412 0.79215686 0.80784314 1"/></material>
       </visual>
       <visual>
         <origin xyz="0 0 0" rpy="1.57079632679 0 1.57079632679"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/pillars_2.stl"/></geometry>
-        <material name="pillars_2_material"><color rgba="1 0 1 1"/></material>
+        <material name="${prefix}_silicone"><color rgba="0.83529412 0.79215686 0.80784314 1"/></material>
       </visual>
       <collision name="${prefix}_sensor_housing_collision">
         <origin xyz="-0.0033 0 ${-0.0015 + (-0.5) * safety_distance}" rpy="0 0 0"/>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="adaptive_tactile_gripper">
+  <xacro:arg name="ns" default="panda_gripper"/>
+  <xacro:arg name="left_sensor" default="pts_2_0"/>
+  <xacro:arg name="right_sensor" default="pts_2_0"/>
+  <xacro:arg name="with_camera" default="true"/>
+  <xacro:arg name="safety_distance" default="0.0"/>
+  <xacro:arg name="use_nominal_extrinsics" default="true"/>
+
+  <xacro:include filename="$(find adaptive_tactile_gripper_description)/urdf/gripper.xacro"/>
+  <xacro:adaptive_tactile_gripper
+      ns="$(arg ns)"
+      left_sensor="$(arg left_sensor)"
+      right_sensor="$(arg right_sensor)"
+      with_camera="$(arg with_camera)"
+      safety_distance="$(arg safety_distance)"
+      use_nominal_extrinsics="$(arg use_nominal_extrinsics)"/>
+</robot>

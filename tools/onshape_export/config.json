@@ -1,0 +1,12 @@
+{
+  "url": "https://cad.onshape.com/documents/ee6a871f9e00fc227503180b/w/c90cab421a5e9546e31f5c11/e/16b75a7cc71174b7cd5960db",
+  "output_format": "mujoco",
+  "output_filename": "raw_gripper",
+  "assets_directory": "assets",
+  "robot_name": "adaptive_tactile_gripper",
+  "merge_stls": false,
+  "ignore": [
+    "*Hex socket head cap screw*",
+    "*Hex nut*"
+  ]
+}

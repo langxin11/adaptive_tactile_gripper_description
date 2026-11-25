@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:macro name="realsense_d435i_mount" params="ns parent safety_distance:=0.0 use_nominal_extrinsics:=true">
+    <joint name="${ns}_camera_mount_joint" type="fixed">
+      <parent link="${parent}"/>
+      <child link="${ns}_camera_mount_link"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+    <link name="${ns}_camera_mount_link">
+      <inertial>
+        <origin xyz="0.0093327739 -0.070144724 0.011918795" rpy="0 0 0"/>
+        <mass value="0.090955175"/>
+        <inertia ixx="9.1184005e-06" iyy="4.3310111e-05" izz="4.3051886e-05" ixy="1.371648e-06" ixz="-1.8641238e-06" iyz="1.6184879e-06"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0.007" rpy="0 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/camera_mount.stl"/></geometry>
+        <material name="camera_mount_material"><color rgba="0.917647 0.917647 0.917647 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0.0125 -0.0685273 0.0279714" rpy="0.244345450549 0 3.14159265359"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/d435i_solid.stl"/></geometry>
+        <material name="d435i_solid_material"><color rgba="0.796078 0.823529 0.937255 1"/></material>
+      </visual>
+      <collision name="${ns}_camera_mount_collision">
+        <origin xyz="0.012501027 -0.064000001 0.0005423393" rpy="0 0 0"/>
+        <geometry><box size="${0.06499995 + 2 * safety_distance} ${0.043002002 + 2 * safety_distance} ${0.0110866788 + 2 * safety_distance}"/></geometry>
+      </collision>
+      <collision name="${ns}_d435i_housing_collision">
+        <origin xyz="0.0125 -0.071557509 0.01581848" rpy="0.244345450549 0 3.14159265359"/>
+        <geometry><box size="${0.090002 + 2 * safety_distance} ${0.025002298 + 2 * safety_distance} ${0.025052002 + 2 * safety_distance}"/></geometry>
+      </collision>
+    </link>
+    <joint name="${ns}_d435i_bottom_screw_joint" type="fixed">
+      <parent link="${ns}_camera_mount_link"/>
+      <child link="${ns}_d435i_bottom_screw_frame"/>
+      <origin xyz="0.0125 -0.060003228 0.010489975" rpy="0 -1.326450863 1.57079632679"/>
+    </joint>
+    <link name="${ns}_d435i_bottom_screw_frame"/>
+    <joint name="${ns}_d435i_link_joint" type="fixed">
+      <parent link="${ns}_d435i_bottom_screw_frame"/>
+      <child link="${ns}_d435i_link"/>
+      <origin xyz="0.0106000006003 0.0175 0.0125000002634" rpy="0 0 0"/>
+    </joint>
+    <link name="${ns}_d435i_link"/>
+    <xacro:if value="${use_nominal_extrinsics}">
+      <joint name="${ns}_d435i_depth_joint" type="fixed">
+        <parent link="${ns}_d435i_link"/>
+        <child link="${ns}_d435i_depth_frame"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+      </joint>
+      <link name="${ns}_d435i_depth_frame"/>
+      <joint name="${ns}_d435i_depth_optical_joint" type="fixed">
+        <parent link="${ns}_d435i_depth_frame"/>
+        <child link="${ns}_d435i_depth_optical_frame"/>
+        <origin xyz="0 0 0" rpy="-1.57079630694 0 -1.57079632679"/>
+      </joint>
+      <link name="${ns}_d435i_depth_optical_frame"/>
+      <joint name="${ns}_d435i_infra1_joint" type="fixed">
+        <parent link="${ns}_d435i_link"/>
+        <child link="${ns}_d435i_infra1_frame"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+      </joint>
+      <link name="${ns}_d435i_infra1_frame"/>
+      <joint name="${ns}_d435i_infra1_optical_joint" type="fixed">
+        <parent link="${ns}_d435i_infra1_frame"/>
+        <child link="${ns}_d435i_infra1_optical_frame"/>
+        <origin xyz="0 0 0" rpy="-1.57079630694 0 -1.57079632679"/>
+      </joint>
+      <link name="${ns}_d435i_infra1_optical_frame"/>
+      <joint name="${ns}_d435i_infra2_joint" type="fixed">
+        <parent link="${ns}_d435i_link"/>
+        <child link="${ns}_d435i_infra2_frame"/>
+        <origin xyz="0 -0.05 0" rpy="0 0 0"/>
+      </joint>
+      <link name="${ns}_d435i_infra2_frame"/>
+      <joint name="${ns}_d435i_infra2_optical_joint" type="fixed">
+        <parent link="${ns}_d435i_infra2_frame"/>
+        <child link="${ns}_d435i_infra2_optical_frame"/>
+        <origin xyz="0 0 0" rpy="-1.57079630694 0 -1.57079632679"/>
+      </joint>
+      <link name="${ns}_d435i_infra2_optical_frame"/>
+      <joint name="${ns}_d435i_color_joint" type="fixed">
+        <parent link="${ns}_d435i_link"/>
+        <child link="${ns}_d435i_color_frame"/>
+        <origin xyz="0 0.015 0" rpy="0 0 0"/>
+      </joint>
+      <link name="${ns}_d435i_color_frame"/>
+      <joint name="${ns}_d435i_color_optical_joint" type="fixed">
+        <parent link="${ns}_d435i_color_frame"/>
+        <child link="${ns}_d435i_color_optical_frame"/>
+        <origin xyz="0 0 0" rpy="-1.57079630694 0 -1.57079632679"/>
+      </joint>
+      <link name="${ns}_d435i_color_optical_frame"/>
+      <joint name="${ns}_d435i_imu_joint" type="fixed">
+        <parent link="${ns}_d435i_link"/>
+        <child link="${ns}_d435i_imu_frame"/>
+        <origin xyz="-0.0117399999627 -0.00552 0.00510000017006" rpy="0 0 0"/>
+      </joint>
+      <link name="${ns}_d435i_imu_frame"/>
+      <joint name="${ns}_d435i_accel_joint" type="fixed">
+        <parent link="${ns}_d435i_link"/>
+        <child link="${ns}_d435i_accel_frame"/>
+        <origin xyz="-0.0117399999627 -0.00552 0.00510000017006" rpy="0 0 0"/>
+      </joint>
+      <link name="${ns}_d435i_accel_frame"/>
+      <joint name="${ns}_d435i_accel_optical_joint" type="fixed">
+        <parent link="${ns}_d435i_accel_frame"/>
+        <child link="${ns}_d435i_accel_optical_frame"/>
+        <origin xyz="0 0 0" rpy="-1.57079630694 0 -1.57079632679"/>
+      </joint>
+      <link name="${ns}_d435i_accel_optical_frame"/>
+      <joint name="${ns}_d435i_gyro_joint" type="fixed">
+        <parent link="${ns}_d435i_link"/>
+        <child link="${ns}_d435i_gyro_frame"/>
+        <origin xyz="-0.0117399999627 -0.00552 0.00510000017006" rpy="0 0 0"/>
+      </joint>
+      <link name="${ns}_d435i_gyro_frame"/>
+      <joint name="${ns}_d435i_gyro_optical_joint" type="fixed">
+        <parent link="${ns}_d435i_gyro_frame"/>
+        <child link="${ns}_d435i_gyro_optical_frame"/>
+        <origin xyz="0 0 0" rpy="-1.57079630694 0 -1.57079632679"/>
+      </joint>
+      <link name="${ns}_d435i_gyro_optical_frame"/>
+    </xacro:if>
+  </xacro:macro>
+</robot>

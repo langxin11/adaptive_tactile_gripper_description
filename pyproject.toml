@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "adaptive-tactile-gripper-description"
+version = "0.1.0"
+description = "DM4310 曲柄滑块自适应触觉夹爪描述包（模块化 MJCF / URDF / SRDF 与硬件规格）"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = {file = "LICENSE"}
+dependencies = [
+    "mujoco>=3.10.0,<5",
+    "numpy>=2.0",
+    "PyYAML>=6.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9,<10",
+    "matplotlib>=3.9",
+    "pillow>=10.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/adaptive_tactile_gripper_description"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"meshes" = "adaptive_tactile_gripper_description/_data/meshes"
+"mjcf" = "adaptive_tactile_gripper_description/_data/mjcf"
+"urdf" = "adaptive_tactile_gripper_description/_data/urdf"
+"srdf" = "adaptive_tactile_gripper_description/_data/srdf"
+"config" = "adaptive_tactile_gripper_description/_data/config"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

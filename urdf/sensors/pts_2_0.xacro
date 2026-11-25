@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:macro name="pts_2_0_sensor" params="prefix parent safety_distance:=0.0">
+    <joint name="${prefix}_sensor_joint" type="fixed">
+      <parent link="${parent}"/>
+      <child link="${prefix}_sensor_link"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+    <link name="${prefix}_sensor_link">
+      <inertial>
+        <origin xyz="-0.0022674886 6.897054e-10 -0.00085107362" rpy="0 0 0"/>
+        <mass value="0.015"/>
+        <inertia ixx="8.0379122e-07" iyy="1.121524e-06" izz="1.6757149e-06" ixy="0" ixz="-2.7169202e-08" iyz="0"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="1.57079632679 0 1.57079632679"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/pillars_4.stl"/></geometry>
+        <material name="pillars_4_material"><color rgba="1 0 1 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0 0 0" rpy="1.57079632679 0 1.57079632679"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/pillars_6.stl"/></geometry>
+        <material name="pillars_6_material"><color rgba="1 0 1 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0 0 0" rpy="1.57079632679 0 1.57079632679"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/housing.stl"/></geometry>
+        <material name="housing_material"><color rgba="0.627451 0.627451 0.627451 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0 0 0" rpy="1.57079632679 0 1.57079632679"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/pillars_3.stl"/></geometry>
+        <material name="pillars_3_material"><color rgba="1 0 1 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0 0 0" rpy="1.57079632679 0 1.57079632679"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/pillars_5.stl"/></geometry>
+        <material name="pillars_5_material"><color rgba="1 0 1 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0 0 0" rpy="1.57079632679 0 1.57079632679"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/pillars_8.stl"/></geometry>
+        <material name="pillars_8_material"><color rgba="1 0 1 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0 0 0" rpy="1.57079632679 0 1.57079632679"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/pillars_0.stl"/></geometry>
+        <material name="pillars_0_material"><color rgba="1 0 1 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0 0 0" rpy="1.57079632679 0 1.57079632679"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/pillars_1.stl"/></geometry>
+        <material name="pillars_1_material"><color rgba="1 0 1 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0 0 0" rpy="1.57079632679 0 1.57079632679"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/pillars_7.stl"/></geometry>
+        <material name="pillars_7_material"><color rgba="1 0 1 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0 0 0" rpy="1.57079632679 0 1.57079632679"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/pillars_2.stl"/></geometry>
+        <material name="pillars_2_material"><color rgba="1 0 1 1"/></material>
+      </visual>
+      <collision name="${prefix}_sensor_housing_collision">
+        <origin xyz="-0.0033 0 ${-0.0015 + (-0.5) * safety_distance}" rpy="0 0 0"/>
+        <geometry><box size="${0.0306 + 2 * safety_distance} ${0.024 + 2 * safety_distance} ${0.0086 + 1 * safety_distance}"/></geometry>
+      </collision>
+      <collision name="${prefix}_taxel_geom_00">
+        <origin xyz="0.007 -0.007 0.0033" rpy="0 0 0"/>
+        <geometry><sphere radius="0.0028"/></geometry>
+      </collision>
+      <collision name="${prefix}_taxel_geom_01">
+        <origin xyz="0 -0.007 0.0036" rpy="0 0 0"/>
+        <geometry><sphere radius="0.0028"/></geometry>
+      </collision>
+      <collision name="${prefix}_taxel_geom_02">
+        <origin xyz="-0.007 -0.007 0.0033" rpy="0 0 0"/>
+        <geometry><sphere radius="0.0028"/></geometry>
+      </collision>
+      <collision name="${prefix}_taxel_geom_10">
+        <origin xyz="0.007 0 0.0036" rpy="0 0 0"/>
+        <geometry><sphere radius="0.0028"/></geometry>
+      </collision>
+      <collision name="${prefix}_taxel_geom_11">
+        <origin xyz="0 0 0.0038" rpy="0 0 0"/>
+        <geometry><sphere radius="0.0028"/></geometry>
+      </collision>
+      <collision name="${prefix}_taxel_geom_12">
+        <origin xyz="-0.007 0 0.0036" rpy="0 0 0"/>
+        <geometry><sphere radius="0.0028"/></geometry>
+      </collision>
+      <collision name="${prefix}_taxel_geom_20">
+        <origin xyz="0.007 0.007 0.0033" rpy="0 0 0"/>
+        <geometry><sphere radius="0.0028"/></geometry>
+      </collision>
+      <collision name="${prefix}_taxel_geom_21">
+        <origin xyz="0 0.007 0.0036" rpy="0 0 0"/>
+        <geometry><sphere radius="0.0028"/></geometry>
+      </collision>
+      <collision name="${prefix}_taxel_geom_22">
+        <origin xyz="-0.007 0.007 0.0033" rpy="0 0 0"/>
+        <geometry><sphere radius="0.0028"/></geometry>
+      </collision>
+    </link>
+    <joint name="${prefix}_fingertip_joint" type="fixed">
+      <parent link="${prefix}_sensor_link"/>
+      <child link="${prefix}_fingertip"/>
+      <origin xyz="0 0 0.0066" rpy="0 0 0"/>
+    </joint>
+    <link name="${prefix}_fingertip"/>
+  </xacro:macro>
+</robot>

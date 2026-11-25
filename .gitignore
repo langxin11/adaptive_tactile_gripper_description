@@ -1,0 +1,16 @@
+# Onshape 原始导出临时产物（可由 credentials.env + onshape-to-robot 复现）
+tools/onshape_export/raw_*
+tools/onshape_export/scene.xml
+tools/onshape_export/assets/
+
+# 构建、环境与凭证
+build/
+install/
+log/
+dist/
+*.egg-info/
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.env

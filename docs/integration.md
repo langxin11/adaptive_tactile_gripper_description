@@ -1,0 +1,162 @@
+# 下游接入与自定义传感器扩展指南
+
+本指南说明如何将 `adaptive_tactile_gripper_description` 接入 `multipanda_ros2`（真机 Panda + MoveIt 2）、`tactile_grasp`（MuJoCo 触觉控制仿真），以及如何扩展新的可替换指尖传感器模组。
+
+---
+
+## 1. 接入 `multipanda_ros2`（ROS 2 Jazzy + MoveIt 2 + 真机 Panda）
+
+### 1.1 工作区构建
+
+将本仓库放入 `multipanda_ros2` 所在 ROS 2 工作区的 `src/`（或通过 `.repos` 拉取），随后构建：
+
+```bash
+source /opt/ros/jazzy/setup.bash
+colcon build --packages-select adaptive_tactile_gripper_description \
+  --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3
+source install/setup.bash
+```
+
+> 若终端激活了额外的 Python 虚拟环境（缺少 `catkin_pkg`），加上 `-DPython3_EXECUTABLE=/usr/bin/python3` 可确保 `ament_cmake` 使用系统 ROS Python。
+
+独立预览测试 Xacro 展开：
+
+```bash
+xacro "$(ros2 pkg prefix adaptive_tactile_gripper_description)/share/adaptive_tactile_gripper_description/urdf/gripper_standalone.urdf.xacro" \
+  left_sensor:=pts_2_0 right_sensor:=pts_2_0 with_camera:=true safety_distance:=0.02
+```
+
+### 1.2 在 Panda URDF 与 SRDF 中挂载
+
+在 `franka_description/robots/real/panda_arm.urdf.xacro`（或仿真 Xacro）中，将夹爪挂载到 `$(arg arm_id)_link8`：
+
+```xml
+<xacro:arg name="left_sensor" default="pts_2_0"/>
+<xacro:arg name="right_sensor" default="pts_2_0"/>
+<xacro:arg name="with_camera" default="true"/>
+<xacro:arg name="use_nominal_extrinsics" default="false"/>
+
+<xacro:include filename="$(find adaptive_tactile_gripper_description)/urdf/gripper.xacro"/>
+<xacro:adaptive_tactile_gripper
+    ns="$(arg arm_id)_gripper"
+    connected_to="$(arg arm_id)_link8"
+    xyz="0 0 0"
+    rpy="0 0 0"
+    left_sensor="$(arg left_sensor)"
+    right_sensor="$(arg right_sensor)"
+    with_camera="$(arg with_camera)"
+    use_nominal_extrinsics="$(arg use_nominal_extrinsics)"
+    safety_distance="0.02"/>
+```
+
+> **安装偏航角提示**：原厂 Franka 手爪在 `panda_link8` 上常使用 `rpy="0 0 ${-pi/4}"` 对齐定位销。上机装配后，请对照真机上侧挂 RealSense D435i 与双指开合方向在 RViz2 中核对一次 `rpy` 的绕 Z 旋转角。
+
+在对应的 MoveIt 2 SRDF（如 `franka_moveit_config/srdf/panda_arm.srdf.xacro`）中引入免碰撞与末端规划组：
+
+```xml
+<xacro:include filename="$(find adaptive_tactile_gripper_description)/srdf/gripper.srdf.xacro"/>
+<xacro:adaptive_tactile_gripper_srdf
+    arm_id="$(arg arm_id)"
+    ns="$(arg arm_id)_gripper"
+    with_camera="$(arg with_camera)"
+    use_nominal_extrinsics="$(arg use_nominal_extrinsics)"
+    left_sensor="$(arg left_sensor)"
+    right_sensor="$(arg right_sensor)"/>
+```
+
+夹爪的 `panda_gripper_tcp` 位于法兰底面前方 145.55 mm。相机本体 `d435i_link` 及各非光学帧采用 **+X 前、+Y 左、+Z 上**，所有 `*_optical_frame` 采用 **+Z 前、+X 右、+Y 下**。`use_nominal_extrinsics:=true` 会生成 depth、color、infra1、infra2、accel、gyro 的名义本体帧和光学帧。MJCF 使用同一套名义帧。
+
+真机示例将 `use_nominal_extrinsics` 设为 `false`，URDF 只定义相机的安装螺孔帧和本体帧，标定外参由 RealSense 驱动发布。URDF 与 SRDF 使用相同的开关值。将驱动相机名称设为与本体帧匹配的 `panda_gripper_d435i`，并核对实际消息的 `frame_id`。双发布者使用同名帧会导致标定 TF 跳变。名义 IMU 帧定义见 [RealSense ROS 模型](https://github.com/realsenseai/realsense-ros/blob/ros2-master/realsense2_description/urdf/_d435i_imu_modules.urdf.xacro)。
+
+### 1.3 开合状态同步与 MoveIt 规划
+
+`panda_gripper_left_finger_slide` 是控制和规划输入，单位为米。右滑块通过 URDF mimic 跟随。用 `get_joint_positions(q_drive_rad)` 将真机电机角转为单指位移和左右销轴角。有效曲柄角为驱动角加回差角，回差未知时使用默认零值。将左滑块、`gripper_drive` 及两个 `*_link_crank_pin` 一并发布到 `/joint_states`，各关节名加 `panda_gripper_` 前缀。`gripper_drive` 的 URDF 值取实际曲柄角，两个销轴值直接取函数返回值。
+
+`panda_gripper_motion` 是单自由度规划组，完整的 `panda_gripper` 组包含被动连杆、指尖和安装帧，可用于末端定义与状态显示。URDF 以开链表达刚体，三个被动转动关节依赖上述闭环状态同步。执行侧用滑块位移或电机角控制机构，并将各被动关节状态由闭环关系重算。
+
+电机协议角度是 `[0, 1.7] rad`。机构有效曲柄角到 `π/2 rad` 时单指闭合 35.355 mm。双侧均装 `pts_2_0` 或 `flat_pad`（含混装）时，名义首次接触提前至 **1.450404 rad、33.15 mm**。用 `get_stroke_limits(left_sensor, right_sensor)` 获取对应配置的无接触上界。SRDF 的 `close` 单指闭合 32 mm，对置接触面净距 2.3 mm。该净距在 `safety_distance=0.02` 时保持一致，因为余量只加到外部避障包络，指背及 PTS 壳体沿闭合轴仅向后扩展。两侧传感器之间始终参与碰撞检查。
+
+### 1.4 Franka Desk 负载核对
+
+无相机双 PTS 整机实测 **686.0 g**。该总质量约束打印件的均匀填充模型，用于估计各部件的质量分布和惯量。含 D435i、支架和相机紧固件约 **777.0 g**。四颗法兰 M6×12 螺钉另计约 **20.5 g**。
+
+`config/specs.yaml` 的 `franka_desk_payload` 记录固定基座、回差角为零的解析闭环构型及残差。质心以法兰基准表达，惯量绕合质心且轴向平行于该法兰基准。若真机安装有平移 `p` 和旋转 `R`，输入 Desk 前将质心换算为 `p + R c`，惯量换算为 `R I Rᵀ`，并将额外螺钉、线缆等质量并入实际总成。
+
+---
+
+## 2. 接入 `tactile_grasp`（MuJoCo 触觉抓取平台）
+
+### 2.1 锁定版本依赖
+
+本描述包声明 `mujoco>=3.2.0,<5`，与当前下游锁定的 3.10.0 有交集。下游双 PTS 配置可以将 `model` 指向任一预生成整机 MJCF。载入 XML 时按原有流程删除 `base_freejoint` 后再挂载到载体或 FR3 法兰。
+
+在 `tactile_grasp/pyproject.toml` 中与 `papillarray-pts` 同样以固定 Git 标签引入（并经 `uv lock` 锁定哈希）：
+
+```toml
+dependencies = [
+    ...
+    "adaptive-tactile-gripper-description @ git+https://github.com/langxin11/adaptive_tactile_gripper_description.git@v0.1.0",
+]
+```
+
+### 2.2 `B1` 新版与旧版 `dm4310` 参数对照
+
+切换到 `B1` 版夹爪时，同步将 `tactile_grasp/configs/control/force_tracking.yaml` 与 `configs/simulation/fr3_dm4310.yaml` 更新为 `config/specs.yaml` 中的 B1 机构几何：
+
+| 参数 | 旧版 (`dm4310`) | 新版 (`B1`) | 单位 |
+| --- | --- | --- | --- |
+| `geometry_crank_radius_m` | `0.03` | `0.025` | `m` |
+| `geometry_link_length_m` | `0.04` | `0.04353553390593274` | `m` |
+| `geometry_offset_m` | `0.021213203435596423` | `0.017677669529663688` | `m` |
+| `geometry_theta0_rad` | `0.7853981633974483` | `0.7853981633974483` | `rad` |
+| `tool_center_in_flange_m` | `[0.0, 0.0, 0.13955]` | `[0.0, 0.0, 0.14555]` | `m` |
+
+双指总闭合雅可比在全开时从旧版的 `0.0424264 m/rad` 变为 B1 的 `0.0353553 m/rad`。力矩到夹持力的换算应使用当前实际曲柄角对应的 `get_closure_jacobian(q_rad)`，同时更新 FR3 的 TCP 偏置（沿法兰 +Z 增加 6 mm）。
+
+### 2.3 动态组合仿真场景
+
+```python
+from adaptive_tactile_gripper_description import build_gripper_spec, get_stroke_limits, get_tactile_layout
+
+gripper_spec = build_gripper_spec(
+    left_sensor="pts_2_0",
+    right_sensor="flat_pad",
+    with_camera=False,
+    fixed_base=True,
+    backlash_rad=0.005,
+    slide_frictionloss_n=0.1,
+    drive_frictionloss_nm=0.04,
+)
+limits = get_stroke_limits("pts_2_0", "flat_pad")
+layout = get_tactile_layout("pts_2_0", "flat_pad", prefix="gripper/")
+```
+
+现有 `tactile_grasp` 的场景生成和触觉读取器要求双侧 3×3，直接接入时使用双 PTS。消费端支持异构模组时，按侧读取 `layout`，跳过返回 `None` 的侧别，仅为具名 taxel 建立触觉接触对和读取通道。用挂载后的 `gripper/tcp` 站点放置场景对象，避免依赖两侧中心 taxel。带前缀的 `geom_name` 和 `site_name` 可用于查询编译后的 ID。自定义环境碰撞掩码时，壳体使用类型位 `4`，指间接触面使用类型位 `8`，二者均与默认环境类型位 `1` 交互。
+
+真机的 `*_sensor_link` 与安装系同向，`taxel_*` 受力站点相对安装系绕局部 X 轴旋转 **Rx(π)**，各原点在相应球心。桥接 `hub_*/sensor_*` 的六轴 wrench 时，先核对 `frame_id` 和参考原点。变换力及力矩时使用同一旋转，移动力矩参考点时添加相应的力臂叉乘项，并将协议的 N·mm 转为 N·m。当前仿真读取器输出逐触点三轴力。
+
+
+---
+
+## 3. 新增自定义指尖传感器模组（如 `eflesh` 或新款触觉垫）
+
+所有传感器模组均装配在左右手指统一的 `sensor_mount` 局部坐标系下：
+
+- **原点**：位于左右指传感器安装面中心（`PTS 2.0` 的 `Housing` 装配参考原点）；
+- **`+Z` 轴**：垂直指腹指向被抓物体方向（即传感器向外突出方向）；
+- **`+X` 轴**：沿指尖远端向上（对应夹爪坐标系 `+Z`）；
+- **`+Y` 轴**：由右手定则 `Z × X` 确定。
+
+### 新增模组 3 步清单
+
+假设要新增名为 `my_sensor` 的模组（将网格放到 `meshes/my_sensor/`）：
+
+1. **添加 MuJoCo 模组** `mjcf/sensors/my_sensor.xml`：
+   - 根体下设 `<body name="sensor_body" pos="0 0 0">` 与惯量；
+   - 视觉网格设 `contype="0" conaffinity="0" group="2"`，接触球/块使用 `class="pillar_collision"`（`group="3"`）；
+   - 如为触觉传感器，确保各 taxel `site` 局部 **`+Z` 指向 `-Z_mount`（受压方向）**，使受压时 `Fz > 0`。
+2. **添加 ROS 2 Xacro 模组** `urdf/sensors/my_sensor.xacro`：
+   - 定义宏 `my_sensor_sensor(prefix, parent, safety_distance:=0.0)`；
+   - 创建 `${prefix}_sensor_link`（含视觉、随 `safety_distance` 外扩的 MoveIt 碰撞盒）及末端 `${prefix}_fingertip`；
+   - 在 `urdf/gripper.xacro` 中引入并在 `left_sensor` / `right_sensor` 分支增加对应 `<xacro:if>`（同步更新 `srdf/gripper.srdf.xacro` 如需附加连杆免碰撞）。
+3. **添加规格文件** `config/sensors/my_sensor.yaml`：记录质量 `mass_kg`、指尖偏置厚度 `thickness_to_tip_m` 与阵列描述。完成后在测试中补充相应编译、展开放置以及可选触觉布局的回归检查。

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:macro name="flat_pad_sensor" params="prefix parent safety_distance:=0.0">
+    <joint name="${prefix}_sensor_joint" type="fixed">
+      <parent link="${parent}"/>
+      <child link="${prefix}_sensor_link"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+    <link name="${prefix}_sensor_link">
+      <inertial>
+        <origin xyz="0 0 0.0033" rpy="0 0 0"/>
+        <mass value="0.01"/>
+        <inertia ixx="5.163e-07" iyy="5.163e-07" izz="9.6e-07" ixy="0" ixz="0" iyz="0"/>
+      </inertial>
+      <visual name="${prefix}_pad_visual">
+        <origin xyz="0 0 0.0033" rpy="0 0 0"/>
+        <geometry><box size="0.024 0.024 0.0066"/></geometry>
+        <material name="pad_visual"><color rgba="0.25 0.27 0.30 1"/></material>
+      </visual>
+      <collision name="${prefix}_pad_collision">
+        <origin xyz="0 0 0.0033" rpy="0 0 0"/>
+        <geometry><box size="0.024 0.024 0.0066"/></geometry>
+      </collision>
+    </link>
+    <joint name="${prefix}_fingertip_joint" type="fixed">
+      <parent link="${prefix}_sensor_link"/>
+      <child link="${prefix}_fingertip"/>
+      <origin xyz="0 0 0.0066" rpy="0 0 0"/>
+    </joint>
+    <link name="${prefix}_fingertip"/>
+  </xacro:macro>
+</robot>

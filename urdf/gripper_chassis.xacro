@@ -1,0 +1,320 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <!-- URDF 使用开链描述。连杆位姿由闭环关节状态同步。 -->
+  <xacro:macro name="adaptive_tactile_gripper_chassis"
+               params="ns:='panda_gripper' connected_to:='' xyz:='0 0 0' rpy:='0 0 0'
+                       safety_distance:=0.0">
+    <xacro:unless value="${connected_to == ''}">
+      <joint name="${ns}_mount_joint" type="fixed">
+        <parent link="${connected_to}"/>
+        <child link="${ns}_base"/>
+        <origin xyz="${xyz}" rpy="${rpy}"/>
+      </joint>
+    </xacro:unless>
+    <link name="${ns}_base">
+      <inertial>
+        <origin xyz="-4.8547631e-08 -0.00026450384 0.037700512" rpy="0 0 0"/>
+        <mass value="0.46598154"/>
+        <inertia ixx="0.00035479458" iyy="0.00049251687" izz="0.00035791238" ixy="2.8219574e-11" ixz="-1.4546216e-10" iyz="-4.2153418e-06"/>
+      </inertial>
+      <visual>
+        <origin xyz="-0.075 0 0.07755" rpy="0 0 1.57079632679"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/mgn9_rail.stl"/></geometry>
+        <material name="mgn9_rail_material"><color rgba="0.6 0.6 0.6 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0 0 0.012" rpy="0 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/stator.stl"/></geometry>
+        <material name="stator_material"><color rgba="0.34902 0.376471 0.4 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0 0 0.05955" rpy="0 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/bracket_2.stl"/></geometry>
+        <material name="bracket_2_material"><color rgba="0.917647 0.917647 0.917647 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0 0 0.007" rpy="0 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/motor_mount.stl"/></geometry>
+        <material name="motor_mount_material"><color rgba="0.615686 0.811765 0.929412 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0 0 0.007" rpy="0 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/franka_adapter.stl"/></geometry>
+        <material name="franka_adapter_material"><color rgba="0.647059 0.647059 0.647059 1"/></material>
+      </visual>
+      <collision name="${ns}_base_collision">
+        <origin xyz="0 0 0.03" rpy="0 0 0"/>
+        <geometry><cylinder radius="${0.045 + safety_distance}" length="${0.062 + 2 * safety_distance}"/></geometry>
+      </collision>
+      <collision name="${ns}_rail_bridge_collision">
+        <origin xyz="0 0 0.071" rpy="0 0 0"/>
+        <geometry><box size="${0.158 + 2 * safety_distance} ${0.076 + 2 * safety_distance} ${0.028 + 2 * safety_distance}"/></geometry>
+      </collision>
+      <collision name="${ns}_adapter_tab_collision">
+        <origin xyz="0 -0.047037501 0.0034999999" rpy="0 0 0"/>
+        <geometry><box size="${0.030002 + 2 * safety_distance} ${0.0179270016 + 2 * safety_distance} ${0.0070020002 + 2 * safety_distance}"/></geometry>
+      </collision>
+    </link>
+    <joint name="${ns}_gripper_drive" type="revolute">
+      <parent link="${ns}_base"/>
+      <child link="${ns}_motor"/>
+      <origin xyz="0 0 0.04105" rpy="0 0 1.96708e-07"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="0" upper="1.57079632679" effort="4" velocity="40"/>
+    </joint>
+    <link name="${ns}_motor">
+      <inertial>
+        <origin xyz="0 0 0.01304976" rpy="0 0 0"/>
+        <mass value="0.059605349"/>
+        <inertia ixx="8.2802594e-06" iyy="8.2802497e-06" izz="9.9379758e-06" ixy="-3.1479638e-07" ixz="0" iyz="0"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0.02" rpy="0 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/crank.stl"/></geometry>
+        <material name="crank_material"><color rgba="0.615686 0.811765 0.929412 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0 0 -0.02905" rpy="0 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/motor.stl"/></geometry>
+        <material name="motor_material"><color rgba="0.647059 0.647059 0.647059 1"/></material>
+      </visual>
+    </link>
+    <joint name="${ns}_left_link_crank_pin" type="revolute">
+      <parent link="${ns}_motor"/>
+      <child link="${ns}_left_rod"/>
+      <origin xyz="-0.0176777 -0.0176777 0.0306" rpy="3.14159265359 0 -2.7658e-07"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="0" upper="1.57079632679" effort="4" velocity="40"/>
+    </joint>
+    <link name="${ns}_left_rod">
+      <inertial>
+        <origin xyz="-0.021767743 -1.64037599996e-08 -0.003" rpy="0 0 0"/>
+        <mass value="0.010274809"/>
+        <inertia ixx="2.0945845e-07" iyy="4.2309692e-06" izz="4.1817626e-06" ixy="0" ixz="1.6018711e-07" iyz="0"/>
+      </inertial>
+      <visual>
+        <origin xyz="0.0176777 -0.0176777 0.0105" rpy="3.14159265359 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/bearing_8x4x2.stl"/></geometry>
+        <material name="bearing_8x4x2_material"><color rgba="0.8 0.8 0.8 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0.0176777 -0.0176777 0.0106" rpy="3.14159265359 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/shim.stl"/></geometry>
+        <material name="shim_material"><color rgba="0.647059 0.647059 0.647059 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0.0176777 -0.0176777 0.0105" rpy="3.14159265359 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/bearing_8x4x2_2.stl"/></geometry>
+        <material name="bearing_8x4x2_2_material"><color rgba="0.8 0.8 0.8 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="-0.0435355 0 0.0041" rpy="0 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/link_spacer.stl"/></geometry>
+        <material name="link_spacer_material"><color rgba="0.615686 0.811765 0.929412 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0.0176777 -0.0176777 0.0105" rpy="3.14159265359 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/link.stl"/></geometry>
+        <material name="link_material"><color rgba="0.231373 0.380392 0.705882 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="-0.0258579 -0.0176777 0.0029" rpy="3.14159265359 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/shim.stl"/></geometry>
+        <material name="shim_material"><color rgba="0.647059 0.647059 0.647059 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0 0 -0.0101" rpy="3.14159265359 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/link_spacer.stl"/></geometry>
+        <material name="link_spacer_material"><color rgba="0.615686 0.811765 0.929412 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0.0176777 -0.0176777 0.0105" rpy="3.14159265359 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/bearing_8x4x2_3.stl"/></geometry>
+        <material name="bearing_8x4x2_3_material"><color rgba="0.8 0.8 0.8 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0.0176777 -0.0176777 0.0105" rpy="3.14159265359 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/bearing_8x4x2_4.stl"/></geometry>
+        <material name="bearing_8x4x2_4_material"><color rgba="0.8 0.8 0.8 1"/></material>
+      </visual>
+    </link>
+    <joint name="${ns}_right_link_crank_pin" type="revolute">
+      <parent link="${ns}_motor"/>
+      <child link="${ns}_right_rod"/>
+      <origin xyz="0.0176777 0.0176777 0.0301" rpy="3.14159265359 0 3.14159237701"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="0" upper="1.57079632679" effort="4" velocity="40"/>
+    </joint>
+    <link name="${ns}_right_rod">
+      <inertial>
+        <origin xyz="-0.021767743 -1.64037599996e-08 -0.003" rpy="0 0 0"/>
+        <mass value="0.010274809"/>
+        <inertia ixx="2.0945845e-07" iyy="4.2309692e-06" izz="4.1817626e-06" ixy="0" ixz="1.6018711e-07" iyz="0"/>
+      </inertial>
+      <visual>
+        <origin xyz="0.0176777 -0.0176777 0.0105" rpy="3.14159265359 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/bearing_8x4x2.stl"/></geometry>
+        <material name="bearing_8x4x2_material"><color rgba="0.8 0.8 0.8 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0.0176777 -0.0176777 0.0106" rpy="3.14159265359 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/shim.stl"/></geometry>
+        <material name="shim_material"><color rgba="0.647059 0.647059 0.647059 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0.0176777 -0.0176777 0.0105" rpy="3.14159265359 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/bearing_8x4x2_2.stl"/></geometry>
+        <material name="bearing_8x4x2_2_material"><color rgba="0.8 0.8 0.8 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="-0.0435355 0 0.0041" rpy="0 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/link_spacer.stl"/></geometry>
+        <material name="link_spacer_material"><color rgba="0.615686 0.811765 0.929412 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0.0176777 -0.0176777 0.0105" rpy="3.14159265359 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/link.stl"/></geometry>
+        <material name="link_material"><color rgba="0.231373 0.380392 0.705882 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="-0.0258579 -0.0176777 0.0029" rpy="3.14159265359 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/shim.stl"/></geometry>
+        <material name="shim_material"><color rgba="0.647059 0.647059 0.647059 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0 0 -0.0101" rpy="3.14159265359 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/link_spacer.stl"/></geometry>
+        <material name="link_spacer_material"><color rgba="0.615686 0.811765 0.929412 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0.0176777 -0.0176777 0.0105" rpy="3.14159265359 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/bearing_8x4x2_3.stl"/></geometry>
+        <material name="bearing_8x4x2_3_material"><color rgba="0.8 0.8 0.8 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0.0176777 -0.0176777 0.0105" rpy="3.14159265359 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/bearing_8x4x2_4.stl"/></geometry>
+        <material name="bearing_8x4x2_4_material"><color rgba="0.8 0.8 0.8 1"/></material>
+      </visual>
+    </link>
+    <joint name="${ns}_left_finger_slide" type="prismatic">
+      <parent link="${ns}_base"/>
+      <child link="${ns}_left_finger"/>
+      <origin xyz="-0.075 0 0.08405" rpy="1.57079632679 0 1.57079632679"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="0" upper="0.03535533905932738" effort="100" velocity="0.5"/>
+    </joint>
+    <link name="${ns}_left_finger">
+      <inertial>
+        <origin xyz="-0.00034517389 0.01908037 0.015312358" rpy="0 0 0"/>
+        <mass value="0.054931748"/>
+        <inertia ixx="2.6449963e-05" iyy="7.4293339e-06" izz="2.6124026e-05" ixy="-3.909154e-07" ixz="-1.8589738e-08" iyz="-2.1530338e-06"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 -0.0065 0" rpy="-1.57079632679 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/mgn9_block.stl"/></geometry>
+        <material name="mgn9_block_material"><color rgba="0.647059 0.647059 0.647059 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0 0.0035 0.01445" rpy="-1.57079632679 -1.57079632679 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/finger_body.stl"/></geometry>
+        <material name="finger_body_material"><color rgba="0.972549 0.529412 0.00392157 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0 0.0035 0.01445" rpy="-1.57079632679 -1.57079632679 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/finger_mount.stl"/></geometry>
+        <material name="finger_mount_material"><color rgba="0.615686 0.811765 0.929412 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0 0.0035 0.01445" rpy="-1.57079632679 -1.57079632679 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/finger_brace.stl"/></geometry>
+        <material name="finger_brace_material"><color rgba="0.231373 0.380392 0.705882 1"/></material>
+      </visual>
+      <collision name="${ns}_left_mgn9_block_back_collision">
+        <origin xyz="0 -0.00050000006 ${0.01445 + (-0.5) * safety_distance}" rpy="0 0 0"/>
+        <geometry><box size="${0.020002 + 2 * safety_distance} ${0.0080019996 + 2 * safety_distance} ${0.028902 + 1 * safety_distance}"/></geometry>
+      </collision>
+      <collision name="${ns}_left_finger_body_back_collision">
+        <origin xyz="0 0.042156606 ${0.015478535 + (-0.5) * safety_distance}" rpy="0 0 0"/>
+        <geometry><box size="${0.024002 + 2 * safety_distance} ${0.067315212 + 2 * safety_distance} ${0.027944928 + 1 * safety_distance}"/></geometry>
+      </collision>
+      <collision name="${ns}_left_finger_mount_back_collision">
+        <origin xyz="-0.0045867246 0.0016 ${0.01445 + (-0.5) * safety_distance}" rpy="0 0 0"/>
+        <geometry><box size="${0.03517545 + 2 * safety_distance} ${0.0138019998 + 2 * safety_distance} ${0.030002 + 1 * safety_distance}"/></geometry>
+      </collision>
+      <collision name="${ns}_left_finger_brace_back_collision">
+        <origin xyz="0 0.018248803 ${0.014008905 + (-0.5) * safety_distance}" rpy="0 0 0"/>
+        <geometry><box size="${0.034002002 + 2 * safety_distance} ${0.033499606 + 2 * safety_distance} ${0.03088419 + 1 * safety_distance}"/></geometry>
+      </collision>
+    </link>
+    <joint name="${ns}_left_sensor_mount_joint" type="fixed">
+      <parent link="${ns}_left_finger"/>
+      <child link="${ns}_left_sensor_mount"/>
+      <origin xyz="0 0.0615 0.03525" rpy="0 0 1.57079632679"/>
+    </joint>
+    <link name="${ns}_left_sensor_mount"/>
+    <joint name="${ns}_right_finger_slide" type="prismatic">
+      <parent link="${ns}_base"/>
+      <child link="${ns}_right_finger"/>
+      <origin xyz="0.075 0 0.08405" rpy="-1.57079632679 0 1.57079632679"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="0" upper="0.03535533905932738" effort="100" velocity="0.5"/>
+      <mimic joint="${ns}_left_finger_slide" multiplier="1" offset="0"/>
+    </joint>
+    <link name="${ns}_right_finger">
+      <inertial>
+        <origin xyz="0.00034517389 -0.01908037 0.015312358" rpy="0 0 0"/>
+        <mass value="0.054931748"/>
+        <inertia ixx="2.6449963e-05" iyy="7.4293339e-06" izz="2.6124026e-05" ixy="-3.909154e-07" ixz="1.8589741e-08" iyz="2.1530336e-06"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0.0065 0.0289" rpy="1.57079632679 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/mgn9_block.stl"/></geometry>
+        <material name="mgn9_block_material"><color rgba="0.647059 0.647059 0.647059 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0 -0.0035 0.01445" rpy="1.57079632679 -1.57079632679 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/finger_body.stl"/></geometry>
+        <material name="finger_body_material"><color rgba="0.972549 0.529412 0.00392157 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0 -0.0035 0.01445" rpy="1.57079632679 -1.57079632679 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/finger_mount.stl"/></geometry>
+        <material name="finger_mount_material"><color rgba="0.615686 0.811765 0.929412 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0 -0.0035 0.01445" rpy="1.57079632679 -1.57079632679 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/finger_brace.stl"/></geometry>
+        <material name="finger_brace_material"><color rgba="0.231373 0.380392 0.705882 1"/></material>
+      </visual>
+      <collision name="${ns}_right_mgn9_block_back_collision">
+        <origin xyz="0 0.00050000006 ${0.01445 + (-0.5) * safety_distance}" rpy="0 0 0"/>
+        <geometry><box size="${0.020002 + 2 * safety_distance} ${0.0080019996 + 2 * safety_distance} ${0.028902 + 1 * safety_distance}"/></geometry>
+      </collision>
+      <collision name="${ns}_right_finger_body_back_collision">
+        <origin xyz="0 -0.042156606 ${0.015478535 + (-0.5) * safety_distance}" rpy="0 0 0"/>
+        <geometry><box size="${0.024002 + 2 * safety_distance} ${0.067315212 + 2 * safety_distance} ${0.027944928 + 1 * safety_distance}"/></geometry>
+      </collision>
+      <collision name="${ns}_right_finger_mount_back_collision">
+        <origin xyz="0.0045867246 -0.0016 ${0.01445 + (-0.5) * safety_distance}" rpy="0 0 0"/>
+        <geometry><box size="${0.03517545 + 2 * safety_distance} ${0.0138019998 + 2 * safety_distance} ${0.030002 + 1 * safety_distance}"/></geometry>
+      </collision>
+      <collision name="${ns}_right_finger_brace_back_collision">
+        <origin xyz="0 -0.018248803 ${0.014008905 + (-0.5) * safety_distance}" rpy="0 0 0"/>
+        <geometry><box size="${0.034002002 + 2 * safety_distance} ${0.033499606 + 2 * safety_distance} ${0.03088419 + 1 * safety_distance}"/></geometry>
+      </collision>
+    </link>
+    <joint name="${ns}_right_sensor_mount_joint" type="fixed">
+      <parent link="${ns}_right_finger"/>
+      <child link="${ns}_right_sensor_mount"/>
+      <origin xyz="0 -0.0615 0.03525" rpy="0 0 -1.57079632679"/>
+    </joint>
+    <link name="${ns}_right_sensor_mount"/>
+    <joint name="${ns}_camera_frame_joint" type="fixed">
+      <parent link="${ns}_base"/>
+      <child link="${ns}_camera_mount_frame"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+    <link name="${ns}_camera_mount_frame"/>
+  </xacro:macro>
+</robot>

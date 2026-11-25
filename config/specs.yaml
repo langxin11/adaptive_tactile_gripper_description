@@ -1,0 +1,142 @@
+# 自适应触觉夹爪（Onshape B1）统一规格
+source:
+  platform: onshape
+  document_id: ee6a871f9e00fc227503180b
+  workspace_id: c90cab421a5e9546e31f5c11
+  element_id: 16b75a7cc71174b7cd5960db
+  branch: B1
+  microversion_id: "63ba637a284b7af6e2491519"
+  onshape_to_robot_version: "1.8.4"
+  raw_mjcf_sha256: "f3133a6947d0aa9abd61e81f353455d8e3b53eccc23102d00e842e6efc961c89"
+  generator_mujoco_version: "4.0.1"
+  mesh_sha256:
+    bearing_8x4x2.stl: "d5e1a4f2ed51e8c42757ba93dbb663a9a6aca97a67d99afacd35e8aeba7c4478"
+    bearing_8x4x2_2.stl: "27011f276f71737207cf9f2ca79ca3098c7d884838fd134a34c3a2d6734b5027"
+    bearing_8x4x2_3.stl: "7b65bfbcdcd6dcfede8ce7fe54eb6185122d4266048bf2e7b7e01ac2fa0d5369"
+    bearing_8x4x2_4.stl: "fba1a14fb88bfc91d992c67e72bff10f1b689666eaad7f43750ec4193ee4ca99"
+    bracket_2.stl: "ffccdb0b216f7c695a5b57b895b780d04755b41b0c696103e990177a2c7ea6c1"
+    camera_mount.stl: "55a76a6b5bbdbdf3c8b23c41074d78680115c510874e8378fa13e117a8987879"
+    crank.stl: "56056ae58f27f885958dfc018d29ea255afd2a36bb7560fe383051ef72147ca6"
+    d435i_solid.stl: "444e62a9c3651bac2d74bef544217160f5d4cfb27ac74633ab5ed0b9ccdb0ebd"
+    finger_body.stl: "125b0c7ec6a05d1fb0b128a8100ce56569d584ff7458893e17421c3b22cd16c6"
+    finger_brace.stl: "214f838fbc227a8866fbd0bef30038518311c148717c9ef95ad4e7bdeaca1298"
+    finger_mount.stl: "c92c88ff23409baeb0e2131a8e2356abf1e28bc3ef5819d5fef79322c5ffbfb5"
+    franka_adapter.stl: "5b566812cc78cddd3de2e7454e84e30096a234f55e886b2012b2350fc81df588"
+    housing.stl: "13175dc2fbf086704d98bdf5e1a01a5182e41f479aecb223d84ce8f9f9cad0a5"
+    link.stl: "bc45e1bbec13383cbc62d0f2ba2f4d8ddef19e6f0a9af9e22c1c6c228719f488"
+    link_spacer.stl: "f2715ab52887b6d292f94156926706c8b8c974be715b57b82a7d80b6a6a7b083"
+    mgn9_block.stl: "95a2381d88ad9a4d7b4dc74254a10be336a1a76e6d74c5d2a372ad068c0e5733"
+    mgn9_rail.stl: "ce6f41750cf62a243efbc4b9ad7908a3c17674814791a629f8afbaafde5ba9bf"
+    motor.stl: "d49cde2ffef3c49008cbaa3c91bb110d3b91fe5f780a63fefbac5730a2d64291"
+    motor_mount.stl: "85d22d84f22c436a84c2d87104dc23ed127f4f4a5e36dc362df96b10bd30a311"
+    pillars_0.stl: "c861ad2244e8cdbe4b3d97ea4b340ababf95b4e0183019dc7aefd7212f42421e"
+    pillars_1.stl: "8fefd23e4d44feb6c6fbdf07b1ccd3d18dd0328f84f9ccdc476007c37dbd3b64"
+    pillars_2.stl: "32f1308b88502fbda50c1c2faea7752aa1731ba05a81926aa76256dce4ad3ce7"
+    pillars_3.stl: "b94f6d8807ccc814c34c07b813aad67dc35be6366a342fffed29d62b89070a62"
+    pillars_4.stl: "d152b73c06a1304e16dff3a91072ded66c23b000736b4ef8e442a1a5fb6a8470"
+    pillars_5.stl: "107b970c3dcb3c0c2e753c0c4e87607a7b09b7ada179c02a738fb813880be11d"
+    pillars_6.stl: "15d2c32c1315753c804307786327185364e79b03afb93d0237ed5d921435659d"
+    pillars_7.stl: "f9080cbcaaf6d2b51970db48a05e2b91fbe7480896e236002ca38a4e1a52dbf7"
+    pillars_8.stl: "60fe52e4c14bc202fe6c308543e2e01ba36c133e517167c015f1138539a2b1cd"
+    shim.stl: "222e77b4f70f06a04f4f432a76b0a4303340f2240055c1268536b75750076e84"
+    stator.stl: "5dc90c78952ac47b101e50dc7647104a1e9fb94599f5ea3e7d846b6dc5422728"
+
+kinematics:
+  type: crank_slider
+  theta0_rad: 0.7853981633974483
+  crank_radius_m: 0.025
+  link_length_m: 0.0435355339059327
+  offset_m: 0.0176776695296637
+  # 协议范围表示控制接口可编码的角度，机构行程由实际曲柄角限定。
+  protocol_range_rad: [0.0, 1.7]
+  mechanism_range_rad: [0.0, 1.5707963267948966]
+  position_min_rad: 0.0
+  position_max_rad: 1.5707963267948966
+  single_finger_stroke_m: 0.0353553390593274
+  total_stroke_m: 0.0707106781186548
+
+  module_contact:
+    # 两侧各装一个 PTS 2.0 或平垫时，名义首次接触由 6.6 mm 单侧突出量决定。
+    applicable_modules: [pts_2_0, flat_pad]
+    first_contact_q_rad: 1.450403783302
+    no_contact_range_rad: [0.0, 1.450403783302]
+    first_contact_single_finger_closure_m: 0.03315
+
+geometry:
+  # 从 franka_adapter 法兰底面到左右传感器中心抓取点的偏置
+  tool_center_in_flange_m: [0.0, 0.0, 0.14555]
+  left_sensor_mount_in_finger_pos_m: [0.0, 0.0615, 0.03525]
+  left_sensor_mount_in_finger_quat_wxyz: [0.7071067811865476, 0.0, 0.0, 0.7071067811865476]
+  right_sensor_mount_in_finger_pos_m: [0.0, -0.0615, 0.03525]
+  right_sensor_mount_in_finger_quat_wxyz: [0.7071067811865476, 0.0, 0.0, -0.7071067811865476]
+  nominal_full_open_sensor_mount_gap_m: 0.0795
+  nominal_full_open_housing_gap_m: 0.0739
+  nominal_full_open_center_pillar_gap_m: 0.0663
+
+actuator:
+  model: DM-J4310P-2EC
+  manufacturer: DAMIAO
+  gear_ratio: 10.0
+  total_mass_kg: 0.3300
+  stator_mass_kg: 0.2820
+  rotor_output_mass_kg: 0.0480
+  rated_torque_nm: 3.5
+  peak_torque_nm: 12.5
+  # 定转子拆分为估计。反射换算沿用转子侧参数假设。
+  armature_kg_m2: 0.002074755
+  damping_nms_rad: 0.02532329
+  frictionloss_nm: 0.04
+  backlash_rad: 0.005
+
+camera:
+  model: Intel RealSense D435i
+  bare_camera_mass_kg: 0.0720
+  mount_and_fasteners_mass_kg: 0.018955
+  total_module_mass_kg: 0.090955
+  inertia_source: https://github.com/google-deepmind/mujoco_menagerie/blob/eea4c7431b63da8278b0ff31638e0b0e941cec0e/realsense_d435i/d435i.xml
+  # realsense2_description 来自 realsense-ros v4.58.4。
+  extrinsics_source: https://github.com/realsenseai/realsense-ros/blob/c8fac23cec47bb18544810f96bc1668edaec0d08/realsense2_description/urdf/_d435i.urdf.xacro
+  imu_extrinsics_source: https://github.com/realsenseai/realsense-ros/blob/c8fac23cec47bb18544810f96bc1668edaec0d08/realsense2_description/urdf/_d435i_imu_modules.urdf.xacro
+  bare_com_in_stl_m: [0.00145113, -0.00031933, -0.01354119]
+  bare_principal_inertia_kg_m2: [3.7994e-05, 3.7055e-05, 4.5547e-06]
+  bare_principal_axes_in_stl_wxyz: [0.02901893, 0.70831212, 0.02754758, 0.70476448]
+  color_fovy_deg: 42.5
+  depth_fovy_deg: 58.0
+  depth_to_color_offset_y_m: 0.015
+  depth_to_infra2_offset_y_m: -0.050
+
+materials_and_mass_budget:
+  calibration_note: >
+    电子秤实测 0.686000 kg 总质量用于约束无相机、双侧 PTS 2.0 装配。
+    在打印件均匀填充假设下估计各刚体的质量分布和惯量，统一有效打印实心率为 0.79473。
+    手指主体为 PLA，其余打印结构件为 PLA-CF，标准件使用标称规格或质量分布估计。
+  effective_print_fill_ratio: 0.794731
+  effective_pla_density_kg_m3: 985.47
+  effective_placf_density_kg_m3: 969.57
+  breakdown_kg:
+    base_body: 0.465982
+    motor_and_crank_body: 0.059605
+    left_rod_assembly: 0.010275
+    right_rod_assembly: 0.010275
+    left_finger_chassis: 0.054932
+    right_finger_chassis: 0.054932
+    left_pts_2_0: 0.015000
+    right_pts_2_0: 0.015000
+    total_without_camera: 0.686
+    realsense_d435i_module: 0.090955
+    total_with_camera: 0.776955
+    optional_flange_m6x12_bolts_x4: 0.02049
+
+franka_desk_payload:
+  # 固定基座、解析闭环构型（回差角为零）下的质量属性估计。
+  # 惯量绕合质心，坐标轴平行于法兰参考系。四颗法兰 M6x12 螺钉需另计。
+  method: analytic_closed_loop_mj_forward
+  without_camera_open: {q_drive_rad: 0.0, q_backlash_rad: 0.0, left_link_crank_pin_rad: 0.0, right_link_crank_pin_rad: 0.0, left_finger_slide_m: 0.0, right_finger_slide_m: 0.0, drive_error_rad: 0.0, max_closure_error_m: 3.4773454818638752e-09, max_angular_speed_rad_s: 0.0, max_slide_speed_m_s: 0.0, mass_kg: 0.686, F_x_Cee_m: [-0.0, -0.00018, 0.055321], F_I_ee_kg_m2: [[0.00106102, -1.694e-05, 2.0e-07], [-1.694e-05, 0.00167272, -6.3e-06], [2.0e-07, -6.3e-06, 0.00087195]]}
+  without_camera_nominal_grasp: {q_drive_rad: 0.75, q_backlash_rad: 0.0, left_link_crank_pin_rad: 0.9186303759406449, right_link_crank_pin_rad: 0.9186303759406449, left_finger_slide_m: 0.017410427473312222, right_finger_slide_m: 0.017410427473312222, drive_error_rad: 0.0, max_closure_error_m: 3.714004705149915e-08, max_angular_speed_rad_s: 0.0, max_slide_speed_m_s: 0.0, mass_kg: 0.686, F_x_Cee_m: [-0.0, -0.00018, 0.055321], F_I_ee_kg_m2: [[0.00106449, -1.013e-05, 1.1e-07], [-1.013e-05, 0.00142211, -6.28e-06], [1.1e-07, -6.28e-06, 0.00062481]]}
+  with_camera_open: {q_drive_rad: 0.0, q_backlash_rad: 0.0, left_link_crank_pin_rad: 0.0, right_link_crank_pin_rad: 0.0, left_finger_slide_m: 0.0, right_finger_slide_m: 0.0, drive_error_rad: 0.0, max_closure_error_m: 3.4773454818638752e-09, max_angular_speed_rad_s: 0.0, max_slide_speed_m_s: 0.0, mass_kg: 0.776955, F_x_Cee_m: [0.001093, -0.00837, 0.05024], F_I_ee_kg_m2: [[0.00161453, 3.687e-05, 3.087e-05], [3.687e-05, 0.0018743, -0.00024854], [3.087e-05, -0.00024854, 0.00131511]]}
+  with_camera_nominal_grasp: {q_drive_rad: 0.75, q_backlash_rad: 0.0, left_link_crank_pin_rad: 0.9186303759406449, right_link_crank_pin_rad: 0.9186303759406449, left_finger_slide_m: 0.017410427473312222, right_finger_slide_m: 0.017410427473312222, drive_error_rad: 0.0, max_closure_error_m: 3.714004705149915e-08, max_angular_speed_rad_s: 0.0, max_slide_speed_m_s: 0.0, mass_kg: 0.776955, F_x_Cee_m: [0.001093, -0.00837, 0.05024], F_I_ee_kg_m2: [[0.001618, 4.368e-05, 3.078e-05], [4.368e-05, 0.00162369, -0.00024852], [3.078e-05, -0.00024852, 0.00106797]]}
+
+default_configuration:
+  left_sensor: pts_2_0
+  right_sensor: pts_2_0
+  with_camera: true

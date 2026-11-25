@@ -1,0 +1,30 @@
+# Contactile PapillArray PTS 2.0 3x3 传感器模组规格（碰撞优先使用 9 颗 r=2.8mm 球体）
+name: pts_2_0
+kind: tactile_3axis_array
+mass_kg: 0.015
+# 中心柱顶沿安装系 +Z。双侧装配的名义接触界限见 specs.yaml。
+thickness_to_tip_m: 0.0066
+tactile:
+  mode: contact_geom
+  rows: 3
+  cols: 3
+  left_prefix: left_taxel_geom_
+  right_prefix: right_taxel_geom_
+  left_site_prefix: left_taxel_
+  right_site_prefix: right_taxel_
+  site_quat_in_sensor_mount_wxyz: [0, 1, 0, 0]
+contact:
+  # 突出量从安装原点沿 +Z 测到最前接触面。
+  friction_coefficient: 0.8
+  solref: [-1200.0, -10.0]
+  solimp: [0.75, 0.95, 0.0025, 0.5, 2.0]
+taxels_in_sensor_mount:
+  - {row: 0, col: 0, pos_m: [0.007, -0.007, 0.0033], radius_m: 0.0028}
+  - {row: 0, col: 1, pos_m: [0.0, -0.007, 0.0036], radius_m: 0.0028}
+  - {row: 0, col: 2, pos_m: [-0.007, -0.007, 0.0033], radius_m: 0.0028}
+  - {row: 1, col: 0, pos_m: [0.007, 0.0, 0.0036], radius_m: 0.0028}
+  - {row: 1, col: 1, pos_m: [0.0, 0.0, 0.0038], radius_m: 0.0028}
+  - {row: 1, col: 2, pos_m: [-0.007, 0.0, 0.0036], radius_m: 0.0028}
+  - {row: 2, col: 0, pos_m: [0.007, 0.007, 0.0033], radius_m: 0.0028}
+  - {row: 2, col: 1, pos_m: [0.0, 0.007, 0.0036], radius_m: 0.0028}
+  - {row: 2, col: 2, pos_m: [-0.007, 0.007, 0.0033], radius_m: 0.0028}

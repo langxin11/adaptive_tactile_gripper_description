@@ -1,0 +1,152 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mujoco model="parallel_gripper">
+  <compiler angle="radian" meshdir="../meshes" autolimits="true" />
+  <default>
+    <default class="parallel_gripper">
+      <joint frictionloss="0.1" />
+      <default class="visual">
+        <geom type="mesh" contype="0" conaffinity="0" group="2" />
+      </default>
+      <default class="collision">
+        <geom group="3" />
+      </default>
+      <default class="pillar_collision">
+        <geom group="3" contype="8" conaffinity="9" friction="0.8 0.02 0.001" solref="-1200 -10" solimp="0.75 0.95 0.0025 0.5 2" />
+      </default>
+    </default>
+  </default>
+  <worldbody>
+    <body name="base" pos="0 0 0" quat="1 0 0 0" childclass="parallel_gripper">
+      <freejoint name="base_freejoint" />
+      <inertial pos="-4.8547631e-08 -0.00026450384 0.037700512" mass="0.46598154" fullinertia="0.00035479458 0.00049251687 0.00035791238 2.8219574e-11 -1.4546216e-10 -4.2153418e-06" />
+      <geom type="mesh" class="visual" pos="-0.075 0 0.07755" quat="0.707107 0 -0 0.707107" mesh="mgn9_rail" material="mgn9_rail_material" />
+      <geom type="mesh" class="visual" pos="-0 -0 0.012" quat="1 0 0 -0" mesh="stator" material="stator_material" />
+      <geom type="mesh" class="visual" pos="-0 -0 0.05955" quat="1 -0 -0 -0" mesh="bracket_2" material="bracket_2_material" />
+      <geom type="mesh" class="visual" pos="-0 0 0.007" quat="1 -0 -0 -0" mesh="motor_mount" material="motor_mount_material" />
+      <geom type="mesh" class="visual" pos="0 0 0.007" quat="1 0 0 0" mesh="franka_adapter" material="franka_adapter_material" />
+      <geom name="base_collision" class="collision" type="cylinder" pos="0 0 0.03" size="0.045 0.031" />
+      <geom name="rail_bridge_collision" class="collision" type="box" pos="0 0 0.071" size="0.079 0.038 0.014" />
+      <geom name="adapter_tab_collision" class="collision" type="box" pos="0 -0.047037501 0.0034999999" size="0.015001 0.0089635008 0.0035010001" />
+      <site name="tcp" group="4" pos="0 0 0.14555" />
+      <frame name="camera_mount_frame" pos="0 0 0" quat="1 0 0 0" />
+      <body name="motor" pos="-0 0 0.04105" quat="1 -0 0 9.8354e-08">
+        <joint axis="0 0 1" name="gripper_drive" type="hinge" range="0 1.570796326794897" frictionloss="0.04" damping="0.02532329" armature="0.002074755" />
+        <joint axis="0 0 1" name="gripper_backlash" type="hinge" range="-0.0025 0.0025" frictionloss="0" damping="0" armature="0" solreflimit="0.002 1" solimplimit="0.95 0.99 0.0001 0.5 2" />
+        <inertial pos="0 0 0.01304976" mass="0.059605349" fullinertia="8.2802594e-06 8.2802497e-06 9.9379758e-06 -3.1479638e-07 0 0" />
+        <geom type="mesh" class="visual" pos="-0 -0 0.02" quat="1 0 -0 0" mesh="crank" material="crank_material" />
+        <geom type="mesh" class="visual" pos="0 -0 -0.02905" quat="1 -0 -0 0" mesh="motor" material="motor_material" />
+        <body name="rod_bearing_shim_subassembly" pos="-0.0176777 -0.0176777 0.0306" quat="0 1 -1.3829e-07 0">
+          <joint axis="0 0 1" name="left_link_crank_pin" type="hinge" frictionloss="0.0" damping="0.01" armature="0" />
+          <inertial pos="-0.021767743 -1.640376e-08 -0.003" mass="0.010274809" fullinertia="2.0945845e-07 4.2309692e-06 4.1817626e-06 0 1.6018711e-07 0" />
+          <geom type="mesh" class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" mesh="bearing_8x4x2" material="bearing_8x4x2_material" />
+          <geom type="mesh" class="visual" pos="0.0176777 -0.0176777 0.0106" quat="0 1 0 0" mesh="shim" material="shim_material" />
+          <geom type="mesh" class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" mesh="bearing_8x4x2_2" material="bearing_8x4x2_2_material" />
+          <geom type="mesh" class="visual" pos="-0.0435355 0 0.0041" quat="1 0 -0 0" mesh="link_spacer" material="link_spacer_material" />
+          <geom type="mesh" class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" mesh="link" material="link_material" />
+          <geom type="mesh" class="visual" pos="-0.0258579 -0.0176777 0.0029" quat="0 -1 0 0" mesh="shim" material="shim_material" />
+          <geom type="mesh" class="visual" pos="0 0 -0.0101" quat="0 1 0 0" mesh="link_spacer" material="link_spacer_material" />
+          <geom type="mesh" class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" mesh="bearing_8x4x2_3" material="bearing_8x4x2_3_material" />
+          <geom type="mesh" class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" mesh="bearing_8x4x2_4" material="bearing_8x4x2_4_material" />
+          <site group="3" name="closing_left_link_finger_pin_2" pos="-0.0435355339 0 -0.0079" quat="0 1 0 0" />
+          <site group="3" name="closing_left_link_finger_pin_2_z" pos="-0.0435355339 0 -0.1079" quat="0 1 0 0" />
+        </body>
+        <body name="rod_bearing_shim_subassembly_2" pos="0.0176777 0.0176777 0.0301" quat="0 -1.3829e-07 -1 0">
+          <joint axis="0 0 1" name="right_link_crank_pin" type="hinge" frictionloss="0.0" damping="0.01" armature="0" />
+          <inertial pos="-0.021767743 -1.640376e-08 -0.003" mass="0.010274809" fullinertia="2.0945845e-07 4.2309692e-06 4.1817626e-06 0 1.6018711e-07 0" />
+          <geom type="mesh" class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 -1 0 0" mesh="bearing_8x4x2" material="bearing_8x4x2_material" />
+          <geom type="mesh" class="visual" pos="0.0176777 -0.0176777 0.0106" quat="0 1 0 0" mesh="shim" material="shim_material" />
+          <geom type="mesh" class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 -1 0 0" mesh="bearing_8x4x2_2" material="bearing_8x4x2_2_material" />
+          <geom type="mesh" class="visual" pos="-0.0435355 -0 0.0041" quat="1 0 -0 -0" mesh="link_spacer" material="link_spacer_material" />
+          <geom type="mesh" class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" mesh="link" material="link_material" />
+          <geom type="mesh" class="visual" pos="-0.0258579 -0.0176777 0.0029" quat="0 -1 -0 0" mesh="shim" material="shim_material" />
+          <geom type="mesh" class="visual" pos="0 -0 -0.0101" quat="0 -1 0 0" mesh="link_spacer" material="link_spacer_material" />
+          <geom type="mesh" class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 -1 0 0" mesh="bearing_8x4x2_3" material="bearing_8x4x2_3_material" />
+          <geom type="mesh" class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" mesh="bearing_8x4x2_4" material="bearing_8x4x2_4_material" />
+          <site group="3" name="closing_right_link_finger_pin_2" pos="-0.0435355 -0 -0.0084" quat="0 1 0 0" />
+          <site group="3" name="closing_right_link_finger_pin_2_z" pos="-0.0435355 -0 -0.1084" quat="0 1 0 0" />
+        </body>
+      </body>
+      <body name="left_finger" pos="-0.075 0 0.08405" quat="0.5 0.5 0.5 0.5">
+        <joint axis="0 0 1" name="left_finger_slide" type="slide" range="0 0.03535533905932738" frictionloss="0.1" damping="0.01" armature="0" />
+        <inertial pos="-0.00034517389 0.01908037 0.015312358" mass="0.054931748" fullinertia="2.6449963e-05 7.4293339e-06 2.6124026e-05 -3.909154e-07 -1.8589738e-08 -2.1530338e-06" />
+        <geom type="mesh" class="visual" pos="0 -0.0065 0" quat="0.707107 -0.707107 0 0" mesh="mgn9_block" material="mgn9_block_material" />
+        <geom type="mesh" class="visual" pos="-0 0.0035 0.01445" quat="0.5 -0.5 -0.5 -0.5" mesh="finger_body" material="finger_body_material" />
+        <geom type="mesh" class="visual" pos="-0 0.0035 0.01445" quat="0.5 -0.5 -0.5 -0.5" mesh="finger_mount" material="finger_mount_material" />
+        <geom type="mesh" class="visual" pos="-0 0.0035 0.01445" quat="0.5 -0.5 -0.5 -0.5" mesh="finger_brace" material="finger_brace_material" />
+        <site group="3" name="closing_left_link_finger_pin_1" pos="-0.0176777 -0.0045 0.0137868" quat="0.5 -0.5 -0.5 -0.5" />
+        <site group="3" name="closing_left_link_finger_pin_1_z" pos="-0.0176777 0.0955 0.0137868" quat="0.5 -0.5 -0.5 -0.5" />
+        <frame name="left_sensor_mount" pos="0 0.0615 0.03525" quat="0.70710678 0 0 0.70710678" />
+        <geom name="left_mgn9_block_back_collision" class="collision" type="box" pos="0 -0.00050000006 0.01445" size="0.010001 0.0040009998 0.014451" />
+        <geom name="left_finger_body_back_collision" class="collision" type="box" pos="0 0.042156606 0.015478535" size="0.012001 0.033657606 0.013972464" />
+        <geom name="left_finger_mount_back_collision" class="collision" type="box" pos="-0.0045867246 0.0016 0.01445" size="0.017587725 0.0069009999 0.015001" />
+        <geom name="left_finger_brace_back_collision" class="collision" type="box" pos="0 0.018248803 0.014008905" size="0.017001001 0.016749803 0.015442095" />
+      </body>
+      <body name="right_finger" pos="0.075 0 0.08405" quat="0.5 -0.5 -0.5 0.5">
+        <joint axis="0 0 1" name="right_finger_slide" type="slide" range="0 0.03535533905932738" frictionloss="0.1" damping="0.01" armature="0" />
+        <inertial pos="0.00034517389 -0.01908037 0.015312358" mass="0.054931748" fullinertia="2.6449963e-05 7.4293339e-06 2.6124026e-05 -3.909154e-07 1.8589741e-08 2.1530336e-06" />
+        <geom type="mesh" class="visual" pos="0 0.0065 0.0289" quat="0.707107 0.707107 0 -0" mesh="mgn9_block" material="mgn9_block_material" />
+        <geom type="mesh" class="visual" pos="-0 -0.0035 0.01445" quat="0.5 0.5 -0.5 0.5" mesh="finger_body" material="finger_body_material" />
+        <geom type="mesh" class="visual" pos="-0 -0.0035 0.01445" quat="0.5 0.5 -0.5 0.5" mesh="finger_mount" material="finger_mount_material" />
+        <geom type="mesh" class="visual" pos="0 -0.0035 0.01445" quat="0.5 0.5 -0.5 0.5" mesh="finger_brace" material="finger_brace_material" />
+        <site group="3" name="closing_right_link_finger_pin_1" pos="0.0176777 0.0045 0.0137868" quat="0.5 0.5 -0.5 0.5" />
+        <site group="3" name="closing_right_link_finger_pin_1_z" pos="0.0176777 -0.0955 0.0137868" quat="0.5 0.5 -0.5 0.5" />
+        <frame name="right_sensor_mount" pos="0 -0.0615 0.03525" quat="0.70710678 0 0 -0.70710678" />
+        <geom name="right_mgn9_block_back_collision" class="collision" type="box" pos="0 0.00050000006 0.01445" size="0.010001 0.0040009998 0.014451" />
+        <geom name="right_finger_body_back_collision" class="collision" type="box" pos="0 -0.042156606 0.015478535" size="0.012001 0.033657606 0.013972464" />
+        <geom name="right_finger_mount_back_collision" class="collision" type="box" pos="0.0045867246 -0.0016 0.01445" size="0.017587725 0.0069009999 0.015001" />
+        <geom name="right_finger_brace_back_collision" class="collision" type="box" pos="0 -0.018248803 0.014008905" size="0.017001001 0.016749803 0.015442095" />
+      </body>
+    </body>
+  </worldbody>
+  <asset>
+    <mesh name="bearing_8x4x2" file="bearing_8x4x2.stl" />
+    <mesh name="bearing_8x4x2_2" file="bearing_8x4x2_2.stl" />
+    <mesh name="bearing_8x4x2_3" file="bearing_8x4x2_3.stl" />
+    <mesh name="bearing_8x4x2_4" file="bearing_8x4x2_4.stl" />
+    <mesh name="bracket_2" file="bracket_2.stl" />
+    <mesh name="crank" file="crank.stl" />
+    <mesh name="finger_body" file="finger_body.stl" />
+    <mesh name="finger_brace" file="finger_brace.stl" />
+    <mesh name="finger_mount" file="finger_mount.stl" />
+    <mesh name="franka_adapter" file="franka_adapter.stl" />
+    <mesh name="link" file="link.stl" />
+    <mesh name="link_spacer" file="link_spacer.stl" />
+    <mesh name="mgn9_block" file="mgn9_block.stl" />
+    <mesh name="mgn9_rail" file="mgn9_rail.stl" />
+    <mesh name="motor" file="motor.stl" />
+    <mesh name="motor_mount" file="motor_mount.stl" />
+    <mesh name="shim" file="shim.stl" />
+    <mesh name="stator" file="stator.stl" />
+    <material name="bearing_8x4x2_material" rgba="0.8 0.8 0.8 1" />
+    <material name="bearing_8x4x2_2_material" rgba="0.8 0.8 0.8 1" />
+    <material name="bearing_8x4x2_3_material" rgba="0.8 0.8 0.8 1" />
+    <material name="bearing_8x4x2_4_material" rgba="0.8 0.8 0.8 1" />
+    <material name="bracket_2_material" rgba="0.917647 0.917647 0.917647 1" />
+    <material name="crank_material" rgba="0.615686 0.811765 0.929412 1" />
+    <material name="finger_body_material" rgba="0.972549 0.529412 0.00392157 1" />
+    <material name="finger_brace_material" rgba="0.231373 0.380392 0.705882 1" />
+    <material name="finger_mount_material" rgba="0.615686 0.811765 0.929412 1" />
+    <material name="franka_adapter_material" rgba="0.647059 0.647059 0.647059 1" />
+    <material name="link_material" rgba="0.231373 0.380392 0.705882 1" />
+    <material name="link_spacer_material" rgba="0.615686 0.811765 0.929412 1" />
+    <material name="mgn9_block_material" rgba="0.647059 0.647059 0.647059 1" />
+    <material name="mgn9_rail_material" rgba="0.6 0.6 0.6 1" />
+    <material name="motor_material" rgba="0.647059 0.647059 0.647059 1" />
+    <material name="motor_mount_material" rgba="0.615686 0.811765 0.929412 1" />
+    <material name="shim_material" rgba="0.647059 0.647059 0.647059 1" />
+    <material name="stator_material" rgba="0.34902 0.376471 0.4 1" />
+  </asset>
+  <actuator>
+    <motor class="parallel_gripper" name="gripper_drive" joint="gripper_drive" gear="1" ctrlrange="-4 4" forcerange="-4 4" />
+  </actuator>
+  <contact>
+    <exclude body1="base" body2="left_finger" />
+    <exclude body1="base" body2="right_finger" />
+  </contact>
+  <equality>
+    <connect body1="left_finger" body2="rod_bearing_shim_subassembly" anchor="-0.0176777 -0.0045 0.0137868" solref="0.002 1" solimp="0.99 0.999 0.0005 0.5 2" />
+    <connect body1="left_finger" body2="rod_bearing_shim_subassembly" anchor="-0.0176777 0.0955 0.0137868" solref="0.002 1" solimp="0.99 0.999 0.0005 0.5 2" />
+    <connect body1="right_finger" body2="rod_bearing_shim_subassembly_2" anchor="0.0176777 0.0045 0.0137868" solref="0.002 1" solimp="0.99 0.999 0.0005 0.5 2" />
+    <connect body1="right_finger" body2="rod_bearing_shim_subassembly_2" anchor="0.0176777 -0.0955 0.0137868" solref="0.002 1" solimp="0.99 0.999 0.0005 0.5 2" />
+  </equality>
+</mujoco>

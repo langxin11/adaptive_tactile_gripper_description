@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="adaptive_tactile_gripper_srdf">
+  <xacro:macro name="adaptive_tactile_gripper_srdf"
+               params="arm_id:='panda' ns:='panda_gripper' with_camera:='true'
+                       left_sensor:='pts_2_0' right_sensor:='pts_2_0' use_nominal_extrinsics:=true">
+    <group name="${ns}">
+      <joint name="${ns}_gripper_drive"/>
+      <joint name="${ns}_left_link_crank_pin"/>
+      <joint name="${ns}_right_link_crank_pin"/>
+      <joint name="${ns}_left_finger_slide"/>
+      <joint name="${ns}_right_finger_slide"/>
+      <joint name="${ns}_left_sensor_mount_joint"/>
+      <joint name="${ns}_right_sensor_mount_joint"/>
+      <joint name="${ns}_tcp_joint"/>
+      <joint name="${ns}_camera_frame_joint"/>
+      <link name="${ns}_base"/>
+      <link name="${ns}_motor"/>
+      <link name="${ns}_left_rod"/>
+      <link name="${ns}_right_rod"/>
+      <link name="${ns}_left_finger"/>
+      <link name="${ns}_left_sensor_mount"/>
+      <link name="${ns}_right_finger"/>
+      <link name="${ns}_right_sensor_mount"/>
+      <link name="${ns}_camera_mount_frame"/>
+      <link name="${ns}_tcp"/>
+      <xacro:if value="${left_sensor in ('pts_2_0', 'flat_pad')}">
+        <joint name="${ns}_left_sensor_joint"/>
+        <joint name="${ns}_left_fingertip_joint"/>
+        <link name="${ns}_left_sensor_link"/>
+        <link name="${ns}_left_fingertip"/>
+      </xacro:if>
+      <xacro:if value="${right_sensor in ('pts_2_0', 'flat_pad')}">
+        <joint name="${ns}_right_sensor_joint"/>
+        <joint name="${ns}_right_fingertip_joint"/>
+        <link name="${ns}_right_sensor_link"/>
+        <link name="${ns}_right_fingertip"/>
+      </xacro:if>
+      <xacro:if value="${with_camera}">
+        <joint name="${ns}_camera_mount_joint"/>
+        <joint name="${ns}_d435i_bottom_screw_joint"/>
+        <joint name="${ns}_d435i_link_joint"/>
+        <link name="${ns}_camera_mount_link"/>
+        <link name="${ns}_d435i_bottom_screw_frame"/>
+        <link name="${ns}_d435i_link"/>
+        <xacro:if value="${use_nominal_extrinsics}">
+          <joint name="${ns}_d435i_depth_joint"/>
+          <joint name="${ns}_d435i_depth_optical_joint"/>
+          <joint name="${ns}_d435i_infra1_joint"/>
+          <joint name="${ns}_d435i_infra1_optical_joint"/>
+          <joint name="${ns}_d435i_infra2_joint"/>
+          <joint name="${ns}_d435i_infra2_optical_joint"/>
+          <joint name="${ns}_d435i_color_joint"/>
+          <joint name="${ns}_d435i_color_optical_joint"/>
+          <joint name="${ns}_d435i_imu_joint"/>
+          <joint name="${ns}_d435i_accel_joint"/>
+          <joint name="${ns}_d435i_accel_optical_joint"/>
+          <joint name="${ns}_d435i_gyro_joint"/>
+          <joint name="${ns}_d435i_gyro_optical_joint"/>
+          <link name="${ns}_d435i_depth_frame"/>
+          <link name="${ns}_d435i_depth_optical_frame"/>
+          <link name="${ns}_d435i_infra1_frame"/>
+          <link name="${ns}_d435i_infra1_optical_frame"/>
+          <link name="${ns}_d435i_infra2_frame"/>
+          <link name="${ns}_d435i_infra2_optical_frame"/>
+          <link name="${ns}_d435i_color_frame"/>
+          <link name="${ns}_d435i_color_optical_frame"/>
+          <link name="${ns}_d435i_imu_frame"/>
+          <link name="${ns}_d435i_accel_frame"/>
+          <link name="${ns}_d435i_accel_optical_frame"/>
+          <link name="${ns}_d435i_gyro_frame"/>
+          <link name="${ns}_d435i_gyro_optical_frame"/>
+        </xacro:if>
+      </xacro:if>
+    </group>
+    <!-- 规划组的唯一独立变量为左滑块。完整末端组用于同步后的状态与接触链。 -->
+    <group name="${ns}_motion">
+      <joint name="${ns}_left_finger_slide"/>
+    </group>
+    <passive_joint name="${ns}_right_finger_slide"/>
+    <passive_joint name="${ns}_gripper_drive"/>
+    <passive_joint name="${ns}_left_link_crank_pin"/>
+    <passive_joint name="${ns}_right_link_crank_pin"/>
+
+    <group_state name="open" group="${ns}">
+      <joint name="${ns}_left_finger_slide" value="0"/>
+      <joint name="${ns}_gripper_drive" value="0"/>
+      <joint name="${ns}_left_link_crank_pin" value="0"/>
+      <joint name="${ns}_right_link_crank_pin" value="0"/>
+    </group_state>
+    <group_state name="open" group="${ns}_motion">
+      <joint name="${ns}_left_finger_slide" value="0"/>
+    </group_state>
+
+    <group_state name="close" group="${ns}">
+      <joint name="${ns}_left_finger_slide" value="0.032"/>
+      <joint name="${ns}_gripper_drive" value="1.3907850895"/>
+      <joint name="${ns}_left_link_crank_pin" value="1.45697201207"/>
+      <joint name="${ns}_right_link_crank_pin" value="1.45697201207"/>
+    </group_state>
+    <group_state name="close" group="${ns}_motion">
+      <joint name="${ns}_left_finger_slide" value="0.032"/>
+    </group_state>
+
+    <end_effector name="${ns}_eef" parent_link="${arm_id}_link8" group="${ns}" parent_group="${arm_id}_arm"/>
+
+    <disable_collisions link1="${arm_id}_link7" link2="${ns}_base" reason="Adjacent"/>
+    <disable_collisions link1="${arm_id}_link8" link2="${ns}_base" reason="Adjacent"/>
+    <disable_collisions link1="${ns}_base" link2="${ns}_left_finger" reason="Adjacent"/>
+    <disable_collisions link1="${ns}_base" link2="${ns}_right_finger" reason="Adjacent"/>
+
+    <xacro:if value="${with_camera}">
+      <disable_collisions link1="${arm_id}_link7" link2="${ns}_camera_mount_link" reason="Adjacent"/>
+      <disable_collisions link1="${arm_id}_link8" link2="${ns}_camera_mount_link" reason="Adjacent"/>
+      <disable_collisions link1="${ns}_base" link2="${ns}_camera_mount_link" reason="Adjacent"/>
+      <disable_collisions link1="${ns}_camera_mount_link" link2="${ns}_left_finger" reason="Never"/>
+      <disable_collisions link1="${ns}_camera_mount_link" link2="${ns}_right_finger" reason="Never"/>
+    </xacro:if>
+
+    <xacro:if value="${left_sensor in ('pts_2_0', 'flat_pad')}">
+      <disable_collisions link1="${ns}_left_finger" link2="${ns}_left_sensor_link" reason="Adjacent"/>
+      <disable_collisions link1="${ns}_base" link2="${ns}_left_sensor_link" reason="Adjacent"/>
+    </xacro:if>
+    <xacro:if value="${right_sensor in ('pts_2_0', 'flat_pad')}">
+      <disable_collisions link1="${ns}_right_finger" link2="${ns}_right_sensor_link" reason="Adjacent"/>
+      <disable_collisions link1="${ns}_base" link2="${ns}_right_sensor_link" reason="Adjacent"/>
+    </xacro:if>
+  </xacro:macro>
+</robot>

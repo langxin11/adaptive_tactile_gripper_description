@@ -1,0 +1,11 @@
+# 无触觉平垫占位模组规格（用于消融对比或纯视觉抓取）
+name: flat_pad
+kind: rigid_pad
+mass_kg: 0.01
+# 前表面沿安装系 +Z；双侧装配的接触界限由 specs.yaml 定义。
+thickness_to_tip_m: 0.0066
+tactile: null
+contact:
+  friction_coefficient: 0.8
+  solref: [-1200.0, -10.0]
+  solimp: [0.75, 0.95, 0.0025, 0.5, 2.0]

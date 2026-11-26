@@ -479,8 +479,34 @@ def _assert_closed_manifold_stl(stl_path: Path) -> None:
             raise ValueError(f"{stl_path.name} 非闭合或面片定向不一致，无法可靠积分惯量")
 
 
+def _clip_polygon_z(
+    poly: list[np.ndarray], z_plane: float, *, keep_above: bool
+) -> list[np.ndarray]:
+    """用平面 z = z_plane 裁剪凸多边形，返回保留侧的新顶点列表。"""
+    if not poly:
+        return []
+
+    def inside(pt: np.ndarray) -> bool:
+        return bool(pt[2] >= z_plane) if keep_above else bool(pt[2] <= z_plane)
+
+    out: list[np.ndarray] = []
+    prev = poly[-1]
+    prev_in = inside(prev)
+    for curr in poly:
+        curr_in = inside(curr)
+        if curr_in != prev_in:
+            dz = float(curr[2] - prev[2])
+            if abs(dz) > 1e-15:
+                t = (z_plane - float(prev[2])) / dz
+                out.append(prev + t * (curr - prev))
+        if curr_in:
+            out.append(curr)
+        prev, prev_in = curr, curr_in
+    return out
+
+
 def _validate_paxini_meshes(paxini_export_dir: Path) -> None:
-    """在修改输出目录前核对 PaXini 源 STL 的存在性、闭合惯量、碰撞包络与 MuJoCo 编译有效性。"""
+    """在修改输出目录前核对 PaXini 源 STL 的存在性、闭合惯量、整面片碰撞包络与 MuJoCo 编译有效性。"""
     sensor_stl = paxini_export_dir / "paxini_m2824.stl"
     adapter_stl = paxini_export_dir / "paxini_m2824_adapter.stl"
     for src in (sensor_stl, adapter_stl):
@@ -490,15 +516,26 @@ def _validate_paxini_meshes(paxini_export_dir: Path) -> None:
     _stl_polyhedral_props(adapter_stl)
     c_h, s_h = np.asarray(PAXINI_M2824_HOUSING_POS), np.asarray(PAXINI_M2824_HOUSING_SIZE)
     c_p, s_p = np.asarray(PAXINI_M2824_PAD_POS), np.asarray(PAXINI_M2824_PAD_SIZE)
+    z_split = float(c_p[2] - s_p[2])
     for src in (adapter_stl, sensor_stl):
-        verts = _stl_triangles(src).reshape(-1, 3)
-        if verts.size == 0:
+        tris = _stl_triangles(src)
+        if tris.size == 0:
             raise ValueError(f"{src.name} 不包含任何三角面片")
-        covered = np.all(np.abs(verts - c_h) <= s_h + 1e-8, axis=1) | np.all(
-            np.abs(verts - c_p) <= s_p + 1e-8, axis=1
-        )
-        if not bool(covered.all()):
+        verts = tris.reshape(-1, 3)
+        in_h = np.all(np.abs(verts - c_h) <= s_h + 1e-8, axis=1).reshape(-1, 3)
+        in_p = np.all(np.abs(verts - c_p) <= s_p + 1e-8, axis=1).reshape(-1, 3)
+        if not bool(np.all(in_h | in_p)):
             raise ValueError(f"{src.name} 存在超出碰撞盒包络的顶点")
+        # 跨壳体与垫块交界面的三角形须按 z = z_split 裁剪并核对两侧子多边形分别落入对应凸盒。
+        spanning = ~(np.all(in_h, axis=1) | np.all(in_p, axis=1))
+        for tri in tris[spanning]:
+            poly = [tri[0], tri[1], tri[2]]
+            below = _clip_polygon_z(poly, z_split, keep_above=False)
+            above = _clip_polygon_z(poly, z_split, keep_above=True)
+            if below and not bool(np.all(np.abs(np.asarray(below) - c_h) <= s_h + 1e-8)):
+                raise ValueError(f"{src.name} 存在跨交界面突出于碰撞盒包络的三角面片")
+            if above and not bool(np.all(np.abs(np.asarray(above) - c_p) <= s_p + 1e-8)):
+                raise ValueError(f"{src.name} 存在跨交界面突出于碰撞盒包络的三角面片")
 
     probe_root = ET.Element("mujoco")
     ET.SubElement(probe_root, "compiler", {"meshdir": str(paxini_export_dir.resolve())})

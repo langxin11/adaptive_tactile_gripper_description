@@ -303,6 +303,43 @@ def test_build_validates_paxini_meshes_before_mutating_output(tmp_path, descript
     assert marker_cfg.read_text(encoding="utf-8") == "# sentinel\n"
     assert marker_stl.read_bytes() == b"sentinel-stl"
 
+    # 顶点各自在壳体或垫块盒内、但斜棱中点 (12, -2, -3) mm 突出于双盒并集外的闭合楔体也须被拒绝。
+    wedge_v = np.array(
+        [
+            [0.005, -0.002, -0.005],
+            [0.010, -0.002, -0.005],
+            [0.010, 0.002, -0.005],
+            [0.005, 0.002, -0.005],
+            [0.005, -0.002, -0.001],
+            [0.014, -0.002, -0.001],
+            [0.014, 0.002, -0.001],
+            [0.005, 0.002, -0.001],
+        ],
+        dtype=np.float32,
+    )
+    wedge_f = [
+        (0, 2, 1),
+        (0, 3, 2),
+        (0, 1, 5),
+        (0, 5, 4),
+        (1, 2, 6),
+        (1, 6, 5),
+        (2, 3, 7),
+        (2, 7, 6),
+        (3, 0, 4),
+        (3, 4, 7),
+        (4, 5, 6),
+        (4, 6, 7),
+    ]
+    wedge_stl = struct.pack("<80sI", b"wedge", len(wedge_f)) + b"".join(
+        struct.pack("<12fH", 0.0, 0.0, 0.0, *wedge_v[list(tri)].ravel(), 0) for tri in wedge_f
+    )
+    (bad_dir / "paxini_m2824_adapter.stl").write_bytes(wedge_stl)
+    with pytest.raises(ValueError, match="跨交界面突出于碰撞盒包络"):
+        description_builder["build_all"](export_dir, out_root, paxini_export_dir=bad_dir)
+    assert marker_cfg.read_text(encoding="utf-8") == "# sentinel\n"
+    assert marker_stl.read_bytes() == b"sentinel-stl"
+
 
 def test_build_preserves_explicit_smooth_meshes(tmp_path, description_builder):
     """已有外观配置显式设置 smooth_meshes 时保留用户列表，缺失该键时回退到默认列表。"""

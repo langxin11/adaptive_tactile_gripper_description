@@ -647,7 +647,9 @@ class TactileForceReader:
     def read(self, data: MjData) -> dict[str, np.ndarray | None]:
         """读取当前帧左右指尖的 ``(N, 3)`` 局部三轴触觉力 ``[Fx, Fy, Fz]``（单位 N）。"""
         result: dict[str, np.ndarray | None] = {}
-        pad_contacts: dict[str, list[tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]] = {
+        pad_contacts: dict[
+            str, list[tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]]
+        ] = {
             "left": [],
             "right": [],
         }
@@ -692,6 +694,7 @@ class TactileForceReader:
                                 force_world,
                                 sign * twist_on_g2_world,
                                 sign * contact_frame[0],
+                                float(con.dist),
                             )
                         )
 
@@ -731,12 +734,16 @@ class TactileForceReader:
                 xy = rigid.xy
                 hull_geom = rigid.hull
                 taxel_forces = np.zeros_like(local_pos)
-                for pos, force, twist, normal_into_pad in contacts:
+                for pos, force, twist, normal_into_pad, con_dist in contacts:
                     if float(normal_into_pad @ normal) <= _FRONT_FACE_NORMAL_MIN_DOT:
                         continue
-                    pos_local = (pos - origin) @ pad_rot
-                    if box_half_z is not None and pos_local[2] > box_half_z:
+                    pos_on_pad = pos + 0.5 * con_dist * normal_into_pad
+                    if (
+                        box_half_z is not None
+                        and float((pos_on_pad - origin) @ normal) > box_half_z
+                    ):
                         continue
+                    pos_local = (pos - origin) @ pad_rot
                     delta = local_pos - pos_local
                     sq_dist = np.einsum("ij,ij->i", delta, delta)
                     distance = np.sqrt(sq_dist - sq_dist.min())
@@ -780,12 +787,13 @@ class TactileForceReader:
             xy = (site_pos - origin) @ tangent
             hull_geom = _build_hull_geometry(xy)
             taxel_forces = np.zeros_like(site_pos)
-            for pos, force, twist, normal_into_pad in contacts:
+            for pos, force, twist, normal_into_pad, con_dist in contacts:
                 if float(normal_into_pad @ normal) <= _FRONT_FACE_NORMAL_MIN_DOT:
                     continue
-                pos_local = (pos - origin) @ pad_rot
-                if box_half_z is not None and pos_local[2] > box_half_z:
+                pos_on_pad = pos + 0.5 * con_dist * normal_into_pad
+                if box_half_z is not None and float((pos_on_pad - origin) @ normal) > box_half_z:
                     continue
+                pos_local = (pos - origin) @ pad_rot
                 delta = site_pos - pos
                 sq_dist = np.einsum("ij,ij->i", delta, delta)
                 # Scaling the distance avoids squaring a tiny sigma. Overflow

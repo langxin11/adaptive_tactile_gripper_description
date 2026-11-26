@@ -872,3 +872,64 @@ def test_paxini_excludes_side_and_rear_pad_contacts(contact_side):
     forces = reader.read(data)["left"]
     assert forces is not None
     np.testing.assert_array_equal(forces, np.zeros((135, 3)))
+
+
+def test_paxini_deep_front_penetration_keeps_reading_load():
+    """验证物体前表面深度压入超过单倍垫厚（> 6 mm）时，仍按垫面接触点判定为前感应面接触。"""
+    scene = mujoco.MjSpec()
+    scene.option.gravity = [0.0, 0.0, 0.0]
+    scene.attach(
+        build_gripper_spec(
+            left_sensor="paxini_m2824", right_sensor=None, with_camera=False, fixed_base=True
+        ),
+        prefix="gripper/",
+        frame=scene.worldbody.add_frame(),
+    )
+    ref_model = scene.compile()
+    ref_data = mujoco.MjData(ref_model)
+    mujoco.mj_forward(ref_model, ref_data)
+    face_pos = ref_data.site("gripper/left_pad_center").xpos.copy()
+    face_rot = ref_data.site("gripper/left_pad_center").xmat.reshape(3, 3)
+    # 方块半厚 15 mm，中心沿局部 -Z（垫前外侧）仅放 8.5 mm，使前表面深度嵌入约 6.5 mm（> 垫厚 6.0 mm）。
+    box_pos = face_pos - 0.0085 * face_rot[:, 2]
+    box = scene.worldbody.add_body(name="deep_box", pos=box_pos.tolist())
+    box.add_geom(
+        name="deep_box_geom",
+        type=mujoco.mjtGeom.mjGEOM_BOX,
+        size=[0.015, 0.008, 0.008],
+        contype=0,
+        conaffinity=2,
+    )
+    add_tactile_contact_pairs(
+        scene,
+        "deep_box_geom",
+        left_sensor="paxini_m2824",
+        right_sensor=None,
+        prefix="gripper/",
+    )
+    model = scene.compile()
+    data = mujoco.MjData(model)
+    mujoco.mj_forward(model, data)
+    # 确认接触穿透深度大于整块垫厚（6.0 mm），使接触中点落到垫块中心之后。
+    box_gid = model.geom("deep_box_geom").id
+    dists = [c.dist for c in data.contact if box_gid in (c.geom1, c.geom2)]
+    assert dists and min(dists) < -0.0061
+
+    reader = TactileForceReader(
+        model,
+        left_sensor="paxini_m2824",
+        right_sensor=None,
+        prefix="gripper/",
+        target_geoms="deep_box_geom",
+    )
+    forces = reader.read(data)["left"]
+    assert forces is not None
+    expected_local, _ = _raw_pad_net_force_local(
+        model,
+        data,
+        "gripper/left_pad_collision",
+        "gripper/left_pad_center",
+        other_geom_id=box_gid,
+    )
+    assert expected_local[2] > 1.0
+    np.testing.assert_allclose(forces.sum(axis=0), expected_local, atol=1e-11)

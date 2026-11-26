@@ -138,6 +138,10 @@ class _HullGeometry:
 class _RigidPadCache:
     pos_snapshot: np.ndarray
     quat_snapshot: np.ndarray
+    geom_pos_snapshot: np.ndarray
+    geom_quat_snapshot: np.ndarray
+    pad_rot_in_geom: np.ndarray
+    face_origin_in_geom: np.ndarray
     local_pos: np.ndarray
     xy: np.ndarray
     hull: _HullGeometry
@@ -244,23 +248,87 @@ def _quat_wxyz_to_mat(quat: np.ndarray) -> np.ndarray:
     return mat.reshape(3, 3)
 
 
-def _build_rigid_pad_cache(model: MjModel, site_ids: np.ndarray) -> _RigidPadCache | None:
+def _orthonormal_basis_from_normal(
+    z_axis: np.ndarray, hint_x: np.ndarray | None = None
+) -> np.ndarray:
+    z = np.asarray(z_axis, dtype=np.float64)
+    z = z / float(np.linalg.norm(z))
+    if hint_x is None:
+        hint_x = np.array([1.0, 0.0, 0.0]) if abs(z[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+    x = hint_x - float(hint_x @ z) * z
+    x_norm = float(np.linalg.norm(x))
+    if x_norm <= 1e-12:
+        fallback = np.array([0.0, 1.0, 0.0]) if abs(z[1]) < 0.9 else np.array([0.0, 0.0, 1.0])
+        x = fallback - float(fallback @ z) * z
+        x_norm = float(np.linalg.norm(x))
+    x /= x_norm
+    y = np.cross(z, x)
+    return np.column_stack((x, y, z))
+
+
+def _pad_frame_in_geom(
+    model: MjModel,
+    pad_gid: int,
+    site_pos_in_geom: np.ndarray,
+    site_rot_in_geom: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Derive sensing tangent frame & inward normal from the pad collision geom."""
+    gtype = int(model.geom_type[pad_gid])
+    if gtype == int(_mj.mjtGeom.mjGEOM_BOX):
+        half = np.asarray(model.geom_size[pad_gid], dtype=np.float64)
+        centroid = site_pos_in_geom.mean(axis=0)
+        ratios = np.abs(centroid) / np.maximum(half, 1e-12)
+        if float(ratios.max()) > 1e-3:
+            axis = int(np.argmax(ratios))
+            face_sign = 1.0 if centroid[axis] >= 0.0 else -1.0
+            z_local = np.zeros(3, dtype=np.float64)
+            z_local[axis] = -face_sign
+            hint = np.zeros(3, dtype=np.float64)
+            hint[(axis + 1) % 3 if axis != 2 else 0] = 1.0
+            pad_rot = _orthonormal_basis_from_normal(z_local, hint)
+            face_origin = np.zeros(3, dtype=np.float64)
+            face_origin[axis] = face_sign * float(half[axis])
+            return pad_rot, face_origin
+    if gtype == int(_mj.mjtGeom.mjGEOM_PLANE):
+        return np.diag([1.0, -1.0, -1.0]), np.zeros(3, dtype=np.float64)
+    mean_normal = site_rot_in_geom[:, :, 2].mean(axis=0)
+    if float(np.linalg.norm(mean_normal)) <= 1e-12:
+        mean_normal = site_rot_in_geom[0, :, 2]
+    pad_rot = _orthonormal_basis_from_normal(mean_normal, site_rot_in_geom[0, :, 0])
+    return pad_rot, np.zeros(3, dtype=np.float64)
+
+
+def _build_rigid_pad_cache(
+    model: MjModel, pad_gid: int, site_ids: np.ndarray
+) -> _RigidPadCache | None:
     if len(site_ids) == 0:
         return None
+    pad_body = int(model.geom_bodyid[pad_gid])
     body_ids = np.asarray(model.site_bodyid[site_ids], dtype=np.intp)
-    if not bool(np.all(body_ids == body_ids[0])):
+    if not bool(np.all(body_ids == pad_body)):
         return None
     pos_body = np.asarray(model.site_pos[site_ids], dtype=np.float64).copy()
     quats = np.asarray(model.site_quat[site_ids], dtype=np.float64).copy()
+    geom_pos = np.asarray(model.geom_pos[pad_gid], dtype=np.float64).copy()
+    geom_quat = np.asarray(model.geom_quat[pad_gid], dtype=np.float64).copy()
+    geom_rot = _quat_wxyz_to_mat(geom_quat)
     rot_body = np.stack([_quat_wxyz_to_mat(q) for q in quats], axis=0)
-    pad_rot_body = rot_body[0]
-    local_pos = (pos_body - pos_body[0]) @ pad_rot_body
+    site_pos_in_geom = (pos_body - geom_pos) @ geom_rot
+    site_rot_in_geom = np.einsum("ij,njk->nik", geom_rot.T, rot_body)
+    pad_rot_in_geom, face_origin_in_geom = _pad_frame_in_geom(
+        model, pad_gid, site_pos_in_geom, site_rot_in_geom
+    )
+    local_pos = (site_pos_in_geom - face_origin_in_geom) @ pad_rot_in_geom
     xy = local_pos[:, :2].copy()
-    rel_rot = np.einsum("ij,njk->nik", pad_rot_body.T, rot_body)
+    rel_rot = np.einsum("ij,njk->nik", pad_rot_in_geom.T, site_rot_in_geom)
     same_orientation = bool(np.allclose(rel_rot, np.eye(3, dtype=np.float64), atol=1e-12))
     return _RigidPadCache(
         pos_snapshot=pos_body,
         quat_snapshot=quats,
+        geom_pos_snapshot=geom_pos,
+        geom_quat_snapshot=geom_quat,
+        pad_rot_in_geom=pad_rot_in_geom,
+        face_origin_in_geom=face_origin_in_geom,
         local_pos=local_pos,
         xy=xy,
         hull=_build_hull_geometry(xy),
@@ -272,19 +340,29 @@ def _build_rigid_pad_cache(model: MjModel, site_ids: np.ndarray) -> _RigidPadCac
 def _solve_2d_tilt(
     lp: np.ndarray, u0: np.ndarray, u1: np.ndarray, tol_u: float
 ) -> tuple[np.ndarray, float]:
+    if not np.isfinite(float(lp.max())):
+        return np.full(len(lp), np.nan, dtype=np.float64), float("inf")
     l0, l1 = 0.0, 0.0
 
     def eval_dual(a0: float, a1: float) -> tuple[float, np.ndarray]:
         z = lp + a0 * u0 + a1 * u1
         z_max = float(z.max())
+        if not np.isfinite(z_max):
+            return float("inf"), np.full(len(lp), np.nan, dtype=np.float64)
         exp_z = np.exp(z - z_max)
         s = float(exp_z.sum())
+        if s <= 0.0 or not np.isfinite(s):
+            return float("inf"), np.full(len(lp), np.nan, dtype=np.float64)
         return z_max + float(np.log(s)), exp_z / s
 
     phi, w_sub = eval_dual(l0, l1)
-    for _ in range(35):
+    if not np.isfinite(phi):
+        return w_sub, float("inf")
+    for _ in range(40):
         g0 = float(w_sub @ u0)
         g1 = float(w_sub @ u1)
+        if not (np.isfinite(g0) and np.isfinite(g1)):
+            return w_sub, float("inf")
         if g0 * g0 + g1 * g1 <= tol_u * tol_u:
             return w_sub, float(np.hypot(g0, g1))
         d0 = u0 - g0
@@ -324,7 +402,42 @@ def _solve_2d_tilt(
             alpha *= 0.5
         if not accepted:
             break
-    return w_sub, float(np.hypot(float(w_sub @ u0), float(w_sub @ u1)))
+    err = float(np.hypot(float(w_sub @ u0), float(w_sub @ u1)))
+    return w_sub, err if np.isfinite(err) else float("inf")
+
+
+def _ray_hull_fallback(
+    weights: np.ndarray, xy: np.ndarray, target: np.ndarray, hull_geom: _HullGeometry
+) -> np.ndarray:
+    """Exact nonnegative convex-combination fallback matching target on the hull."""
+    vertices = hull_geom.vertices
+    edges = hull_geom.edges
+    edge_sq = hull_geom.edge_sq
+    inward = hull_geom.inward_unit
+    mean = weights @ xy
+    direction = target - mean
+    if float(np.linalg.norm(direction)) <= 1e-12:
+        return weights
+    if hull_geom.is_collinear:
+        hit = target
+        blend = 1.0
+    else:
+        approach = -(inward @ direction)
+        mean_dist = np.maximum(np.einsum("ij,ij->i", mean - vertices, inward), 0.0)
+        steps = np.full(len(vertices), np.inf)
+        np.divide(mean_dist, approach, out=steps, where=approach > 0.0)
+        step = max(1.0, float(np.min(steps)))
+        blend = 1.0 / step
+        hit = mean + step * direction
+    hit_rel = hit - vertices
+    fractions = np.clip(np.einsum("ij,ij->i", hit_rel, edges) / edge_sq, 0.0, 1.0)
+    residual = hit_rel - fractions[:, None] * edges
+    edge_idx = int(np.argmin(np.einsum("ij,ij->i", residual, residual)))
+    endpoint_fraction = float(fractions[edge_idx])
+    matched = (1.0 - blend) * weights
+    matched[hull_geom.seg_starts[edge_idx]] += blend * (1.0 - endpoint_fraction)
+    matched[hull_geom.seg_ends[edge_idx]] += blend * endpoint_fraction
+    return matched
 
 
 def _match_pad_moment(
@@ -336,6 +449,8 @@ def _match_pad_moment(
     """Compute local nonnegative KL-tilted weights matching target (or its hull projection)."""
     if len(hull_geom.seg_starts) == 0:
         z_max = float(log_prior.max())
+        if not np.isfinite(z_max):
+            return np.full(len(xy), 1.0 / len(xy), dtype=np.float64)
         exp_z = np.exp(log_prior - z_max)
         return exp_z / float(exp_z.sum())
 
@@ -371,18 +486,31 @@ def _match_pad_moment(
         matched[active_idx[0]] = 1.0
         return matched
 
-    lp = log_prior[active_idx]
     u = (xy[active_idx] - target) / scale
     u0, u1 = u[:, 0], u[:, 1]
+    u_sq = u0 * u0 + u1 * u1
     tol_u = 1e-11 / scale
-    w_sub, err_u = _solve_2d_tilt(lp, u0, u1, tol_u)
-    if err_u > 1e-9 / scale and not bool(np.all(np.isfinite(lp))):
-        # When an extreme tiny sigma underflows neighbor log-priors to -inf,
-        # retry with a sharp finite local prior so the target moment still matches.
-        w_sub, _ = _solve_2d_tilt(-50.0 * (u0 * u0 + u1 * u1), u0, u1, tol_u)
+    retry_tol_u = 1e-8 / scale
+
+    w_sub, err_u = _solve_2d_tilt(log_prior[active_idx], u0, u1, tol_u)
+    if not (np.isfinite(err_u) and err_u <= retry_tol_u and bool(np.all(np.isfinite(w_sub)))):
+        # Retry with a well-conditioned local Gaussian prior that cannot underflow,
+        # then a uniform maximum-entropy prior if the local solve still stops early.
+        for fallback_lp in (-20.0 * u_sq, np.zeros_like(u0)):
+            cand_w, cand_err = _solve_2d_tilt(fallback_lp, u0, u1, tol_u)
+            if np.isfinite(cand_err) and bool(np.all(np.isfinite(cand_w))):
+                if not np.isfinite(err_u) or cand_err < err_u:
+                    w_sub, err_u = cand_w, cand_err
+                if err_u <= retry_tol_u:
+                    break
 
     matched = np.zeros(len(xy), dtype=np.float64)
-    matched[active_idx] = w_sub
+    if np.isfinite(err_u) and bool(np.all(np.isfinite(w_sub))):
+        matched[active_idx] = w_sub
+    else:
+        matched[active_idx] = 1.0 / len(active_idx)
+    if not (np.isfinite(err_u) and err_u <= 1e-7 / scale):
+        matched = _ray_hull_fallback(matched, xy, target, hull_geom)
     return matched
 
 
@@ -392,8 +520,8 @@ class TactileForceReader:
     ``read(data)`` 按侧返回形状为 ``(N, 3)`` 的浮点数组（列顺序 ``[Fx, Fy, Fz]``，单位 N，表达在各测点
     ``site`` 局部坐标系下），测点顺序与 ``layout[side]["taxels"]`` 一致，无触觉的一侧返回 ``None``。
 
-    对 ``pad_sites``，仅统计作用于前感应面的接触（排除垫块侧面与背面接触），以高斯权重为先验，
-    在首个测点的切平面内通过局部非负指数倾斜校正权重质心。
+    对 ``pad_sites``，基于垫块碰撞体自身坐标帧仅统计作用于前感应面的接触（排除垫块侧面与背面接触），
+    以高斯权重为先验，在前感应面切平面内通过局部非负指数倾斜（含病态先验安全回退）校正权重质心。
     凸包内重构投影压力中心及平面力臂产生的一阶力矩，凸包外将接触点投影至最近的凸包边界。
     权重非负且和为一，前感应面三维合力在同一坐标系内守恒（至浮点精度）。
     ``condim=4/6`` 的接触法向扭矩在垫面法向上的分量由高斯加权的零合力切向力偶重构，
@@ -468,7 +596,7 @@ class TactileForceReader:
                     geom_to_index={},
                     pad_geom_id=pad_gid,
                 )
-                self._rigid_pads[side] = _build_rigid_pad_cache(model, site_ids)
+                self._rigid_pads[side] = _build_rigid_pad_cache(model, pad_gid, site_ids)
             else:
                 raise ValueError(f"未知触觉布局模式 {mode!r}")
 
@@ -583,16 +711,21 @@ class TactileForceReader:
             if rigid is not None:
                 cur_pos = np.asarray(self._model.site_pos[spec.site_ids], dtype=np.float64)
                 cur_quat = np.asarray(self._model.site_quat[spec.site_ids], dtype=np.float64)
+                cur_gpos = np.asarray(self._model.geom_pos[pad_gid], dtype=np.float64)
+                cur_gquat = np.asarray(self._model.geom_quat[pad_gid], dtype=np.float64)
                 if not (
                     np.array_equal(cur_pos, rigid.pos_snapshot)
                     and np.array_equal(cur_quat, rigid.quat_snapshot)
+                    and np.array_equal(cur_gpos, rigid.geom_pos_snapshot)
+                    and np.array_equal(cur_gquat, rigid.geom_quat_snapshot)
                 ):
-                    rigid = _build_rigid_pad_cache(self._model, spec.site_ids)
+                    rigid = _build_rigid_pad_cache(self._model, pad_gid, spec.site_ids)
                     self._rigid_pads[side] = rigid
             if rigid is not None:
-                sid0 = int(spec.site_ids[0])
-                origin = np.asarray(data.site_xpos[sid0], dtype=np.float64)
-                pad_rot = np.asarray(data.site_xmat[sid0], dtype=np.float64).reshape(3, 3)
+                geom_pos_w = np.asarray(data.geom_xpos[pad_gid], dtype=np.float64)
+                geom_rot_w = np.asarray(data.geom_xmat[pad_gid], dtype=np.float64).reshape(3, 3)
+                origin = geom_pos_w + geom_rot_w @ rigid.face_origin_in_geom
+                pad_rot = geom_rot_w @ rigid.pad_rot_in_geom
                 normal = pad_rot[:, 2]
                 local_pos = rigid.local_pos
                 xy = rigid.xy
@@ -631,18 +764,26 @@ class TactileForceReader:
                 result[side] = taxel_forces
                 continue
 
+            geom_pos_w = np.asarray(data.geom_xpos[pad_gid], dtype=np.float64)
+            geom_rot_w = np.asarray(data.geom_xmat[pad_gid], dtype=np.float64).reshape(3, 3)
             site_pos = np.asarray(data.site_xpos[spec.site_ids], dtype=np.float64)
             site_rot = np.asarray(data.site_xmat[spec.site_ids], dtype=np.float64).reshape(-1, 3, 3)
-            pad_rot = site_rot[0]
+            site_pos_in_geom = (site_pos - geom_pos_w) @ geom_rot_w
+            site_rot_in_geom = np.einsum("ij,njk->nik", geom_rot_w.T, site_rot)
+            pad_rot_in_geom, face_origin_in_geom = _pad_frame_in_geom(
+                self._model, pad_gid, site_pos_in_geom, site_rot_in_geom
+            )
+            origin = geom_pos_w + geom_rot_w @ face_origin_in_geom
+            pad_rot = geom_rot_w @ pad_rot_in_geom
             tangent = pad_rot[:, :2]
             normal = pad_rot[:, 2]
-            xy = (site_pos - site_pos[0]) @ tangent
+            xy = (site_pos - origin) @ tangent
             hull_geom = _build_hull_geometry(xy)
             taxel_forces = np.zeros_like(site_pos)
             for pos, force, twist, normal_into_pad in contacts:
                 if float(normal_into_pad @ normal) <= _FRONT_FACE_NORMAL_MIN_DOT:
                     continue
-                pos_local = (pos - site_pos[0]) @ pad_rot
+                pos_local = (pos - origin) @ pad_rot
                 if box_half_z is not None and pos_local[2] > box_half_z:
                     continue
                 delta = site_pos - pos

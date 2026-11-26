@@ -647,27 +647,113 @@ def test_rigid_pad_refreshes_cache_when_site_transforms_change():
     peak_idx = int(np.argmax(before[1:, 2])) + 1
     assert before[peak_idx, 2] > 1e-3
 
-    # 将受压峰值测点的局部坐标系翻转 180° 并微调位置，再刷新前向运动学。
+    # 同时翻转首个测点（taxel_001）与受压峰值测点的局部坐标系，不应误屏蔽前感应面接触。
+    sid0 = reader.site_ids("left")[0]
     peak_sid = reader.site_ids("left")[peak_idx]
+    model.site_quat[sid0] = [1.0, 0.0, 0.0, 0.0]
     model.site_quat[peak_sid] = [1.0, 0.0, 0.0, 0.0]
     model.site_pos[peak_sid, 0] += 0.0005
     mujoco.mj_forward(model, data)
 
     after = reader.read(data)["left"]
     assert after is not None
-    # 翻转该测点法向后，其局部 Fz 符号须反转为负，且将全部测点还原到世界系后总力仍与 MuJoCo 严格一致。
+    # 翻转该测点法向后，其局部 Fz 符号须反转为负，未翻转测点保持正值，世界合力与 MuJoCo 严格一致。
     assert after[peak_idx, 2] < -1e-3
+    unflipped = np.ones(135, dtype=bool)
+    unflipped[[0, peak_idx]] = False
+    assert np.all(after[unflipped, 2] >= -1e-12)
+    assert after[unflipped, 2].sum() > 1.0
     sids = np.array(reader.site_ids("left"), dtype=np.intp)
     world_sum = np.einsum(
         "nij,nj->ni", np.asarray(data.site_xmat[sids]).reshape(-1, 3, 3), after
     ).sum(axis=0)
     pad_rot = np.asarray(
-        data.site_xmat[model.site("gripper/left_taxel_001").id], dtype=np.float64
+        data.site_xmat[model.site("gripper/left_pad_center").id], dtype=np.float64
     ).reshape(3, 3)
     expected_local, _ = _raw_pad_net_force_local(
-        model, data, "gripper/left_pad_collision", "gripper/left_taxel_001"
+        model, data, "gripper/left_pad_collision", "gripper/left_pad_center"
     )
     np.testing.assert_allclose(pad_rot.T @ world_sum, expected_local, atol=1e-11)
+
+
+@pytest.mark.parametrize(
+    ("xy_mount", "sigma_m"),
+    [
+        ((-0.013, 0.009), 0.0002),
+        ((0.0143082, 0.001), 1e-200),
+        ((0.015, 0.0), 1e-200),
+    ],
+)
+def test_paxini_small_sigma_keeps_finite_exact_cop(xy_mount, sigma_m):
+    """验证极小 pad_sigma_m（含有限下溢与边界外全 -inf 先验）仍返回有限、归一化且精确压力中心的读数。"""
+    scene = mujoco.MjSpec()
+    scene.option.gravity = [0.0, 0.0, 0.0]
+    scene.attach(
+        build_gripper_spec(
+            left_sensor="paxini_m2824", right_sensor=None, with_camera=False, fixed_base=True
+        ),
+        prefix="gripper/",
+        frame=scene.worldbody.add_frame(),
+    )
+    ref_model = scene.compile()
+    ref_data = mujoco.MjData(ref_model)
+    mujoco.mj_forward(ref_model, ref_data)
+    mount_pos = ref_data.body("gripper/left_sensor_body").xpos.copy()
+    mount_rot = ref_data.body("gripper/left_sensor_body").xmat.reshape(3, 3)
+    target_mount = np.array([xy_mount[0], xy_mount[1], 0.0037])
+    probe_pos = mount_pos + mount_rot @ (target_mount + np.array([0.0, 0.0, 0.0018]))
+    probe = scene.worldbody.add_body(name="small_sigma_probe", pos=probe_pos.tolist())
+    probe.add_geom(
+        name="small_sigma_probe_geom",
+        type=mujoco.mjtGeom.mjGEOM_SPHERE,
+        size=[0.002, 0.0, 0.0],
+        contype=0,
+        conaffinity=2,
+    )
+    add_tactile_contact_pairs(
+        scene,
+        "small_sigma_probe_geom",
+        left_sensor="paxini_m2824",
+        right_sensor=None,
+        prefix="gripper/",
+    )
+    model = scene.compile()
+    data = mujoco.MjData(model)
+    for _ in range(100):
+        mujoco.mj_step(model, data)
+
+    reader = TactileForceReader(
+        model,
+        left_sensor="paxini_m2824",
+        right_sensor=None,
+        prefix="gripper/",
+        pad_sigma_m=sigma_m,
+        target_geoms="small_sigma_probe_geom",
+    )
+    forces = reader.read(data)["left"]
+    assert forces is not None
+    assert np.all(np.isfinite(forces))
+    fz = forces[:, 2]
+    assert np.all(fz >= -1e-12)
+    assert fz.sum() > 0.05
+    expected_local, _ = _raw_pad_net_force_local(
+        model,
+        data,
+        "gripper/left_pad_collision",
+        "gripper/left_pad_center",
+        other_geom_id=model.geom("small_sigma_probe_geom").id,
+    )
+    np.testing.assert_allclose(forces.sum(axis=0), expected_local, atol=1e-11)
+    sids = np.array(reader.site_ids("left"), dtype=np.intp)
+    cop_world = np.sum(data.site_xpos[sids] * fz[:, None], axis=0) / fz.sum()
+    cop_mount = (cop_world - data.body("gripper/left_sensor_body").xpos) @ data.body(
+        "gripper/left_sensor_body"
+    ).xmat.reshape(3, 3)
+    if xy_mount[0] <= 0.0143082:
+        np.testing.assert_allclose(cop_mount[:2], xy_mount, atol=5e-5)
+    else:
+        assert cop_mount[0] == pytest.approx(0.0143082, abs=5e-5)
+        assert abs(cop_mount[1] - xy_mount[1]) < 5e-5
 
 
 @pytest.mark.parametrize("taxel_id", [39, 78])

@@ -118,6 +118,8 @@ dependencies = [
 
 ```python
 from adaptive_tactile_gripper_description import (
+    TactileForceReader,
+    add_tactile_contact_pairs,
     build_gripper_spec,
     get_stroke_limits,
     get_tactile_layout,
@@ -125,22 +127,37 @@ from adaptive_tactile_gripper_description import (
 
 gripper_spec = build_gripper_spec(
     left_sensor="pts_2_0",
-    right_sensor="flat_pad",
+    right_sensor="paxini_m2824",
     with_camera=False,
     fixed_base=True,
     backlash_rad=0.005,
     slide_frictionloss_n=0.1,
     drive_frictionloss_nm=0.04,
 )
-limits = get_stroke_limits("pts_2_0", "flat_pad")
-layout = get_tactile_layout("pts_2_0", "flat_pad", prefix="gripper/")
+limits = get_stroke_limits("pts_2_0", "paxini_m2824")
+layout = get_tactile_layout("pts_2_0", "paxini_m2824", prefix="gripper/")
+
+# 挂载夹爪与被抓物体后，统一注册接触对并用 TactileForceReader 读取三轴阵列力：
+add_tactile_contact_pairs(
+    scene,
+    "cube/target_cube_geom",
+    left_sensor="pts_2_0",
+    right_sensor="paxini_m2824",
+    prefix="gripper/",
+)
+model = scene.compile()
+reader = TactileForceReader(
+    model,
+    left_sensor="pts_2_0",
+    right_sensor="paxini_m2824",
+    prefix="gripper/",
+    target_geoms=["cube/target_cube_geom"],
+)
 ```
 
-现有 `tactile_grasp` 的场景生成和触觉读取器要求双侧 3×3，直接接入时使用双 PTS。消费端支持异构模组时，按侧读取 `layout`，跳过返回 `None` 的侧别，并根据 `layout[side]["mode"]` 区分接触配对与读取方式：
-- **`contact_geom`（如 `pts_2_0`）**：为每个 `taxel["geom_name"]` 注册显式接触 `<pair>`，并在对应 `taxel["site_name"]` 读取逐球三维接触力；
-- **`pad_sites`（如 `paxini_m2824`）**：整块平垫共用单一的 `layout[side]["pad_geom_name"]`，**仅可对该碰撞体注册一次 `<pair>`**（MuJoCo 不会对重复 `<pair>` 去重，按测点循环注册会成倍放大接触数量），随后读取该垫块的接触点与三维力并投影/分配至 135 个 `taxel["site_name"]` 坐标系。
-
-用挂载后的 `gripper/tcp` 站点放置场景对象，避免依赖两侧中心 taxel。带前缀的 `geom_name`、`pad_geom_name` 和 `site_name` 可用于查询编译后的 ID。自定义环境碰撞掩码时，壳体使用类型位 `4`，指间接触面使用类型位 `8`，二者均与默认环境类型位 `1` 交互。
+现有 `tactile_grasp` 的场景生成和触觉读取器要求双侧 3×3，直接接入时使用双 PTS，可通过 `reader.read_grid(data, side)` 直接获取 `(3, rows, cols)` 数组；支持异构模组（含 135 测点 `paxini_m2824`）或手写读取逻辑时，按以下规则接入：
+- **`add_tactile_contact_pairs` / `TactileForceReader`（推荐）**：自动根据 `layout[side]["mode"]` 处理配对与读取——为 `contact_geom`（`pts_2_0`）注册逐球 `<pair>` 并在各球 `site` 读取精确三维力（`read(data)` 返回 `(9, 3)`）；为 `pad_sites`（`paxini_m2824`）仅注册**单条** `(pad_geom_name, object_geom)` `<pair>`，并以默认 `pad_sigma_m=0.0025` m 的对数稳定化高斯空间核将垫块上的所有接触力守恒插值至 135 个 `site` 局部坐标系（`read(data)` 返回 `(135, 3)`，[Fx, Fy, Fz] 三轴合力严格守恒且保留压力中心与扭转力偶）；无触觉侧返回 `None`。
+- **手动查询 `layout`**：`contact_geom` 为每个 `taxel["geom_name"]` 注册 `<pair>`；`pad_sites` 整块平垫共用顶层 `layout[side]["pad_geom_name"]`，**仅可对该碰撞体注册一次 `<pair>`**（MuJoCo 不会对重复 `<pair>` 去重，按测点循环注册会成倍放大接触数量）。用挂载后的 `gripper/tcp` 站点放置场景对象，避免依赖两侧中心 taxel。自定义环境碰撞掩码时，壳体使用类型位 `4`，指间接触面使用类型位 `8`，二者均与默认环境类型位 `1` 交互。
 
 真机的 `*_sensor_link` 与安装系同向，`taxel_*` 受力站点相对安装系绕局部 X 轴旋转 **Rx(π)**，各原点在相应球心。桥接 `hub_*/sensor_*` 的六轴 wrench 时，先核对 `frame_id` 和参考原点。变换力及力矩时使用同一旋转，移动力矩参考点时添加相应的力臂叉乘项，并将协议的 N·mm 转为 N·m。当前仿真读取器输出逐触点三轴力。
 

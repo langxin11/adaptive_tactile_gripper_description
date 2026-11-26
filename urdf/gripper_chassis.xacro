@@ -122,7 +122,7 @@
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/shim.stl"/></geometry>
         <material name="${ns}_steel"><color rgba="0.68235294 0.70980392 0.7372549 1"/></material>
       </visual>
-      <visual>
+      <visual name="${ns}_left_crank_spacer">
         <origin xyz="0 0 -0.0101" rpy="3.14159265359 0 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/link_spacer.stl"/></geometry>
         <material name="${ns}_pla_cf_structure"><color rgba="0.14117647 0.26666667 0.62352941 1"/></material>
@@ -181,7 +181,7 @@
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/shim.stl"/></geometry>
         <material name="${ns}_steel"><color rgba="0.68235294 0.70980392 0.7372549 1"/></material>
       </visual>
-      <visual>
+      <visual name="${ns}_right_crank_spacer">
         <origin xyz="0 0 -0.0101" rpy="3.14159265359 0 0"/>
         <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/link_spacer.stl"/></geometry>
         <material name="${ns}_pla_cf_structure"><color rgba="0.14117647 0.26666667 0.62352941 1"/></material>

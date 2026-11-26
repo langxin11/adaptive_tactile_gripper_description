@@ -1427,10 +1427,14 @@ def _build_chassis_mjcf(
 
     # 估计连杆子装配体惯量，并移除内部连杆碰撞体。
     rod_masses: list[float] = []
-    for rod_name in ("rod_bearing_shim_subassembly", "rod_bearing_shim_subassembly_2"):
+    for rod_side, rod_name in (
+        ("left", "rod_bearing_shim_subassembly"),
+        ("right", "rod_bearing_shim_subassembly_2"),
+    ):
         rod = motor.find(f"body[@name='{rod_name}']")
         rod_parts: list[InertialPart] = []
         spacer_idx = 0
+        crank_spacer_found = False
         for geom in list(rod.findall("geom")):
             if geom.get("class") != "visual":
                 rod.remove(geom)
@@ -1462,6 +1466,10 @@ def _build_chassis_mjcf(
                             mass_kg=ROD_SPACER_HARDWARE_MASS_KG / 2.0,
                         )
                     )
+                    if float(np.hypot(p[0], p[1])) < 1e-3:
+                        geom.set("name", f"{rod_side}_crank_spacer")
+                        crank_spacer_found = True
+        assert crank_spacer_found
         rm, rcom, rI = _combine_inertials(rod_parts)
         _set_inertial_element(rod, rm, rcom, rI)
         rod_masses.append(rm)
@@ -1635,6 +1643,22 @@ def _build_chassis_mjcf(
     contact = ET.SubElement(root, "contact")
     for side in ("left", "right"):
         ET.SubElement(contact, "exclude", {"body1": "base", "body2": f"{side}_finger"})
+    for rod_side, opp_side in (("left", "right"), ("right", "left")):
+        # 曲柄销轴套与对侧滑块碰撞盒的内部限位止档（q <= 1.7 rad 时净距 1.75 mm > margin 1.70 mm，无接触），
+        # 在空载急闭过冲超出 1.7 rad 时阻止曲柄轴套撞入对侧滑块。
+        ET.SubElement(
+            contact,
+            "pair",
+            {
+                "name": f"chassis_{rod_side}_spacer_stop",
+                "geom1": f"{rod_side}_crank_spacer",
+                "geom2": f"{opp_side}_mgn9_block_back_collision",
+                "condim": "1",
+                "margin": "0.0017",
+                "solref": "0.002 1",
+                "solimp": "0.99 0.999 0.0001 0.5 2",
+            },
+        )
 
     equality = ET.SubElement(root, "equality")
     # 使用刚体锚点定义闭环，同时保留站点用于核对闭环误差。

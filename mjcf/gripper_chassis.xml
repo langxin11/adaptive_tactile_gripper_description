@@ -44,7 +44,7 @@
           <geom type="mesh" class="visual" pos="-0.0435355 0 0.0041" quat="1 0 -0 0" mesh="link_spacer" material="pla_cf_structure" />
           <geom type="mesh" class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" mesh="link" material="pla_cf_structure" />
           <geom type="mesh" class="visual" pos="-0.0258579 -0.0176777 0.0029" quat="0 -1 0 0" mesh="shim" material="steel" />
-          <geom type="mesh" class="visual" pos="0 0 -0.0101" quat="0 1 0 0" mesh="link_spacer" material="pla_cf_structure" />
+          <geom type="mesh" class="visual" pos="0 0 -0.0101" quat="0 1 0 0" mesh="link_spacer" material="pla_cf_structure" name="left_crank_spacer" />
           <geom type="mesh" class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" mesh="bearing_8x4x2_3" material="steel" />
           <geom type="mesh" class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" mesh="bearing_8x4x2_4" material="steel" />
           <site group="3" name="closing_left_link_finger_pin_2" pos="-0.0435355339 0 -0.0079" quat="0 1 0 0" />
@@ -59,7 +59,7 @@
           <geom type="mesh" class="visual" pos="-0.0435355 -0 0.0041" quat="1 0 -0 -0" mesh="link_spacer" material="pla_cf_structure" />
           <geom type="mesh" class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" mesh="link" material="pla_cf_structure" />
           <geom type="mesh" class="visual" pos="-0.0258579 -0.0176777 0.0029" quat="0 -1 -0 0" mesh="shim" material="steel" />
-          <geom type="mesh" class="visual" pos="0 -0 -0.0101" quat="0 -1 0 0" mesh="link_spacer" material="pla_cf_structure" />
+          <geom type="mesh" class="visual" pos="0 -0 -0.0101" quat="0 -1 0 0" mesh="link_spacer" material="pla_cf_structure" name="right_crank_spacer" />
           <geom type="mesh" class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 -1 0 0" mesh="bearing_8x4x2_3" material="steel" />
           <geom type="mesh" class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" mesh="bearing_8x4x2_4" material="steel" />
           <site group="3" name="closing_right_link_finger_pin_2" pos="-0.0435355 -0 -0.0084" quat="0 1 0 0" />
@@ -128,6 +128,8 @@
   <contact>
     <exclude body1="base" body2="left_finger" />
     <exclude body1="base" body2="right_finger" />
+    <pair name="chassis_left_spacer_stop" geom1="left_crank_spacer" geom2="right_mgn9_block_back_collision" condim="1" margin="0.0017" solref="0.002 1" solimp="0.99 0.999 0.0001 0.5 2" />
+    <pair name="chassis_right_spacer_stop" geom1="right_crank_spacer" geom2="left_mgn9_block_back_collision" condim="1" margin="0.0017" solref="0.002 1" solimp="0.99 0.999 0.0001 0.5 2" />
   </contact>
   <equality>
     <connect body1="left_finger" body2="rod_bearing_shim_subassembly" anchor="-0.0176777 -0.0045 0.0137868" solref="0.002 1" solimp="0.99 0.999 0.0005 0.5 2" />

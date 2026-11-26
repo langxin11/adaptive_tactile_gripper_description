@@ -244,6 +244,9 @@ def _add_module_contact_exclusions(
         spec.add_exclude(bodyname1="base", bodyname2="cam_camera_assembly")
 
 
+_OVERLAPPING_TIP_SENSORS = frozenset({"pts_2_0", "flat_pad", "paxini_m2824"})
+
+
 def _contact_slide_if_configured(
     data_root: Path, left_sensor: str | None, right_sensor: str | None
 ) -> float | None:
@@ -256,6 +259,8 @@ def _contact_slide_if_configured(
         spec = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
         thickness = spec.get("thickness_to_tip_m") if isinstance(spec, dict) else None
         if isinstance(thickness, bool) or not isinstance(thickness, (int, float)):
+            return None
+        if name not in _OVERLAPPING_TIP_SENSORS and spec.get("opposing_tip_stop") is not True:
             return None
     return get_stroke_limits(left_sensor, right_sensor)["first_contact_single_finger_closure_m"]
 

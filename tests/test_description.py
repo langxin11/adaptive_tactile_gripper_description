@@ -363,11 +363,18 @@ def test_unloaded_chassis_overshoot_stays_clear_of_opposing_slider():
         sat_axes.append(np.array([math.cos(rad), math.sin(rad), 0.0]))
     axes_mat = np.stack(sat_axes, axis=1)
 
-    for torque in (1.0, 4.0):
+    # 校验默认 2 ms 步长全扭矩档位以及 4/5 ms 宿主步长典型扭矩下均保持正间隙。
+    cases = [
+        *((0.002, tq) for tq in (0.5, 1.0, 1.25, 2.0, 2.75, 3.5, 4.0)),
+        (0.004, 1.25),
+        (0.005, 0.75),
+    ]
+    for dt, torque in cases:
+        model.opt.timestep = dt
         data = mujoco.MjData(model)
         data.ctrl[0] = torque
         min_clearance = float("inf")
-        for _ in range(400):
+        for _ in range(round(0.4 / dt)):
             mujoco.mj_step(model, data)
             for s_gid, b_gid, vs_loc, vb_loc in opposing_pairs:
                 vs = vs_loc @ data.geom_xmat[s_gid].reshape(3, 3).T + data.geom_xpos[s_gid]
@@ -376,7 +383,70 @@ def test_unloaded_chassis_overshoot_stays_clear_of_opposing_slider():
                 pb = vb @ axes_mat
                 gaps = np.maximum(ps.min(axis=0) - pb.max(axis=0), pb.min(axis=0) - ps.max(axis=0))
                 min_clearance = min(min_clearance, float(gaps.max()))
-        assert min_clearance > 0.0, (torque, min_clearance)
+        assert min_clearance > 0.0, (dt, torque, min_clearance)
+
+
+def test_custom_offset_pads_do_not_get_premature_closure_stop(tmp_path, monkeypatch):
+    """验证声明了 thickness_to_tip_m 但未正对重叠的自定义偏置垫块不会被误加对置止档肌腱。"""
+    import yaml
+
+    from adaptive_tactile_gripper_description import assembly
+
+    root = get_data_root()
+    for rel in (
+        "meshes",
+        "mjcf/gripper_chassis.xml",
+        "config/specs.yaml",
+        "config/appearance.yaml",
+    ):
+        dst = tmp_path / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.symlink_to(root / rel)
+
+    sensors_mjcf = tmp_path / "mjcf/sensors"
+    sensors_cfg = tmp_path / "config/sensors"
+    sensors_mjcf.mkdir(parents=True, exist_ok=True)
+    sensors_cfg.mkdir(parents=True, exist_ok=True)
+    for name, y_offset, opt_in in (
+        ("offset_a", 0.020, False),
+        ("offset_b", 0.020, False),
+        ("centered_optin", 0.0, True),
+    ):
+        (sensors_mjcf / f"{name}.xml").write_text(
+            f"""<mujoco><worldbody><body name="sensor_body">
+            <inertial pos="0 0 0" mass="0.01" diaginertia="1e-6 1e-6 1e-6"/>
+            <geom name="pad_collision" type="box" pos="0 {y_offset} 0.0007" size="0.010 0.008 0.003" group="3"/>
+            </body></worldbody></mujoco>""",
+            encoding="utf-8",
+        )
+        cfg: dict[str, object] = {"name": name, "thickness_to_tip_m": 0.0037, "tactile": None}
+        if opt_in:
+            cfg["opposing_tip_stop"] = True
+        (sensors_cfg / f"{name}.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
+
+    monkeypatch.setattr(assembly, "get_data_root", lambda: tmp_path)
+
+    # 未声明 opposing_tip_stop 的偏置自定义垫块不挂载止档肌腱，可无接触闭合到完整 37.55 mm 行程。
+    spec_offset = build_gripper_spec(
+        left_sensor="offset_a", right_sensor="offset_b", with_camera=False, fixed_base=True
+    )
+    assert all(t.name != "opposing_tip_stop" for t in spec_offset.tendons)
+    m_off = spec_offset.compile()
+    d_off = mujoco.MjData(m_off)
+    d_off.ctrl[0] = 1.0
+    for _ in range(500):
+        mujoco.mj_step(m_off, d_off)
+    assert d_off.ncon == 0
+    assert float(d_off.joint("left_finger_slide").qpos[0]) > 0.0374
+
+    # 显式声明 opposing_tip_stop: true 的自定义正对模组则挂载止档肌腱。
+    spec_optin = build_gripper_spec(
+        left_sensor="centered_optin",
+        right_sensor="centered_optin",
+        with_camera=False,
+        fixed_base=True,
+    )
+    assert any(t.name == "opposing_tip_stop" for t in spec_optin.tendons)
 
 
 @pytest.mark.parametrize("timestep", [0.004, 0.005])

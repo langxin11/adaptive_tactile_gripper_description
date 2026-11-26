@@ -1231,3 +1231,96 @@ def test_pad_sites_off_center_recessed_array_selects_sensing_face(monkeypatch):
     )
     assert ncon >= 1 and expected_local[2] > 0.1
     np.testing.assert_allclose(forces.sum(axis=0), expected_local, atol=1e-11)
+
+
+def test_paxini_rejects_disabled_nativeccd_instead_of_dropping_load():
+    """验证禁用 nativeccd 时明确报错而非静默丢力，启用 nativeccd 且禁用 multiccd 时仍精确读数。"""
+    dsbl_nativeccd = int(getattr(mujoco.mjtDisableBit, "mjDSBL_NATIVECCD", 0))
+    if not dsbl_nativeccd:
+        pytest.skip("当前 MuJoCo 版本不含 mjDSBL_NATIVECCD")
+
+    def _build_mesh_probe_model(*, disable_nativeccd: bool, disable_multiccd: bool):
+        scene = mujoco.MjSpec()
+        scene.option.gravity = [0.0, 0.0, 0.0]
+        if disable_nativeccd:
+            scene.option.disableflags |= dsbl_nativeccd
+        if disable_multiccd:
+            scene.option.disableflags |= int(mujoco.mjtDisableBit.mjDSBL_MULTICCD)
+        scene.attach(
+            build_gripper_spec(
+                left_sensor="paxini_m2824", right_sensor=None, with_camera=False, fixed_base=True
+            ),
+            prefix="gripper/",
+            frame=scene.worldbody.add_frame(),
+        )
+        cube_verts = [
+            x
+            for vx in (-0.005, 0.005)
+            for vy in (-0.005, 0.005)
+            for vz in (-0.005, 0.005)
+            for x in (vx, vy, vz)
+        ]
+        scene.add_mesh(name="probe_cube_mesh", uservert=cube_verts)
+        ref_m = scene.compile()
+        ref_d = mujoco.MjData(ref_m)
+        mujoco.mj_forward(ref_m, ref_d)
+        face_pos = ref_d.site("gripper/left_pad_center").xpos.copy()
+        face_rot = ref_d.site("gripper/left_pad_center").xmat.reshape(3, 3)
+        body = scene.worldbody.add_body(
+            name="mesh_probe", pos=(face_pos - 0.004 * face_rot[:, 2]).tolist()
+        )
+        body.add_geom(
+            name="mesh_probe_geom",
+            type=mujoco.mjtGeom.mjGEOM_MESH,
+            meshname="probe_cube_mesh",
+            contype=0,
+            conaffinity=2,
+        )
+        add_tactile_contact_pairs(
+            scene,
+            "mesh_probe_geom",
+            left_sensor="paxini_m2824",
+            right_sensor=None,
+            prefix="gripper/",
+        )
+        return scene.compile()
+
+    # 1. 初始化时已禁用 nativeccd -> 立即报错
+    bad_model = _build_mesh_probe_model(disable_nativeccd=True, disable_multiccd=False)
+    with pytest.raises(ValueError, match="nativeccd"):
+        TactileForceReader(
+            bad_model,
+            left_sensor="paxini_m2824",
+            right_sensor=None,
+            prefix="gripper/",
+            target_geoms="mesh_probe_geom",
+        )
+
+    # 2. 启用 nativeccd（即使禁用 multiccd）-> 正常读出完整网格法向力
+    ok_model = _build_mesh_probe_model(disable_nativeccd=False, disable_multiccd=True)
+    ok_data = mujoco.MjData(ok_model)
+    mujoco.mj_forward(ok_model, ok_data)
+    reader = TactileForceReader(
+        ok_model,
+        left_sensor="paxini_m2824",
+        right_sensor=None,
+        prefix="gripper/",
+        target_geoms="mesh_probe_geom",
+    )
+    forces = reader.read(ok_data)["left"]
+    assert forces is not None
+    expected, ncon = _raw_pad_net_force_local(
+        ok_model,
+        ok_data,
+        "gripper/left_pad_collision",
+        "gripper/left_pad_center",
+        other_geom_id=ok_model.geom("mesh_probe_geom").id,
+    )
+    assert ncon >= 1 and expected[2] > 0.1
+    np.testing.assert_allclose(forces.sum(axis=0), expected, atol=1e-11)
+
+    # 3. 运行时临时切换禁用 nativeccd -> read() 明确报错而非静默归零
+    ok_model.opt.disableflags |= dsbl_nativeccd
+    mujoco.mj_forward(ok_model, ok_data)
+    with pytest.raises(ValueError, match="nativeccd"):
+        reader.read(ok_data)

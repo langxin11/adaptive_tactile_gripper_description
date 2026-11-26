@@ -134,7 +134,7 @@
           <geom class="visual" pos="-0.0435355 0 0.0041" material="pla_cf_structure" mesh="link_spacer" />
           <geom class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" material="pla_cf_structure" mesh="link" />
           <geom class="visual" pos="-0.0258579 -0.0176777 0.0029" quat="0 -1 0 0" material="steel" mesh="shim" />
-          <geom class="visual" pos="0 0 -0.0101" quat="0 1 0 0" material="pla_cf_structure" mesh="link_spacer" />
+          <geom name="left_crank_spacer" class="visual" pos="0 0 -0.0101" quat="0 1 0 0" material="pla_cf_structure" mesh="link_spacer" />
           <geom class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" material="steel" mesh="bearing_8x4x2_3" />
           <geom class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" material="steel" mesh="bearing_8x4x2_4" />
           <site name="closing_left_link_finger_pin_2" pos="-0.0435355 0 -0.0079" quat="0 1 0 0" group="3" />
@@ -149,7 +149,7 @@
           <geom class="visual" pos="-0.0435355 0 0.0041" material="pla_cf_structure" mesh="link_spacer" />
           <geom class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" material="pla_cf_structure" mesh="link" />
           <geom class="visual" pos="-0.0258579 -0.0176777 0.0029" quat="0 -1 0 0" material="steel" mesh="shim" />
-          <geom class="visual" pos="0 0 -0.0101" quat="0 -1 0 0" material="pla_cf_structure" mesh="link_spacer" />
+          <geom name="right_crank_spacer" class="visual" pos="0 0 -0.0101" quat="0 -1 0 0" material="pla_cf_structure" mesh="link_spacer" />
           <geom class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 -1 0 0" material="steel" mesh="bearing_8x4x2_3" />
           <geom class="visual" pos="0.0176777 -0.0176777 0.0105" quat="0 1 0 0" material="steel" mesh="bearing_8x4x2_4" />
           <site name="closing_right_link_finger_pin_2" pos="-0.0435355 0 -0.0084" quat="0 1 0 0" group="3" />
@@ -283,6 +283,8 @@
     </body>
   </worldbody>
   <contact>
+    <pair geom1="left_crank_spacer" geom2="right_mgn9_block_back_collision" name="chassis_left_spacer_stop" condim="1" solref="0.002" solimp="0.99 0.999 0.0001" margin="0.0017" />
+    <pair geom1="right_crank_spacer" geom2="left_mgn9_block_back_collision" name="chassis_right_spacer_stop" condim="1" solref="0.002" solimp="0.99 0.999 0.0001" margin="0.0017" />
     <exclude body1="base" body2="left_finger" />
     <exclude body1="base" body2="right_finger" />
     <exclude body1="base" body2="left_sensor_body" />

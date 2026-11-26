@@ -27,6 +27,15 @@ _ROLLING_FRICTION = 0.001
 _MIN_COUPLE_VARIANCE_M2 = 1e-16
 _FRONT_FACE_NORMAL_MIN_DOT = 0.5
 _FRONT_FACE_PLANE_TOL_M = 5e-5
+_DSBL_NATIVECCD = int(getattr(_mj.mjtDisableBit, "mjDSBL_NATIVECCD", 0))
+
+
+def _require_box_pad_nativeccd(model: MjModel) -> None:
+    if _DSBL_NATIVECCD and (int(model.opt.disableflags) & _DSBL_NATIVECCD):
+        raise ValueError(
+            "pad_sites 盒式平垫的前感应面接触过滤依赖 MuJoCo nativeccd 接触几何，"
+            "不支持在模型选项中禁用 nativeccd（disableflags 含 nativeccd=disable）"
+        )
 
 
 def _require_contact_default(sensor_name: str, contact_cfg: dict[str, Any] | None, key: str) -> Any:
@@ -645,6 +654,8 @@ class TactileForceReader:
                 pad_gid = self._require_id(
                     model, _mj.mjtObj.mjOBJ_GEOM, side_layout["pad_geom_name"]
                 )
+                if int(model.geom_type[pad_gid]) == int(_mj.mjtGeom.mjGEOM_BOX):
+                    _require_box_pad_nativeccd(model)
                 self._geom_owners.setdefault(pad_gid, []).append(side)
                 self._sides[side] = _SideSpec(
                     mode=mode,
@@ -711,6 +722,12 @@ class TactileForceReader:
             "right": [],
         }
         for side, spec in self._sides.items():
+            if (
+                spec is not None
+                and spec.pad_geom_id is not None
+                and int(self._model.geom_type[spec.pad_geom_id]) == int(_mj.mjtGeom.mjGEOM_BOX)
+            ):
+                _require_box_pad_nativeccd(self._model)
             result[side] = (
                 None if spec is None else np.zeros((len(spec.site_ids), 3), dtype=np.float64)
             )

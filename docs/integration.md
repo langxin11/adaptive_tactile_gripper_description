@@ -206,4 +206,4 @@ reader = TactileForceReader(
    - 定义宏 `my_sensor_sensor(prefix, parent, safety_distance:=0.0)`；
    - 创建 `${prefix}_sensor_link`（含视觉、随 `safety_distance` 外扩的 MoveIt 碰撞盒）及末端 `${prefix}_fingertip`；
    - 在 `urdf/gripper.xacro` 中引入并在 `left_sensor` / `right_sensor` 分支增加对应 `<xacro:if>`（同步更新 `srdf/gripper.srdf.xacro` 如需附加连杆免碰撞）。
-3. **添加规格文件** `config/sensors/my_sensor.yaml`：记录质量 `mass_kg`、指尖偏置厚度 `thickness_to_tip_m` 与阵列描述。完成后在测试中补充相应编译、展开放置以及可选触觉布局的回归检查。
+3. **添加规格文件** `config/sensors/my_sensor.yaml`：记录质量 `mass_kg`、指尖偏置厚度 `thickness_to_tip_m` 与阵列描述；若两侧自定模组接触面正对重叠并希望自动挂载防越心限位肌腱 `opposing_tip_stop`，可显式声明 `opposing_tip_stop: true`。完成后在测试中补充相应编译、展开放置以及可选触觉布局的回归检查。

@@ -455,13 +455,31 @@ def _load_paxini_taxels(path: Path) -> list[dict[str, object]]:
     return taxels
 
 
+def _assert_closed_manifold_stl(stl_path: Path) -> None:
+    """校验二进制 STL 为闭合且面片定向一致的流形网格（每条有向边恰好配对一次反向边）。"""
+    tris = _stl_triangles(stl_path)
+    if len(tris) < 4:
+        raise ValueError(f"{stl_path.name} 三角面片不足，无法构成闭合刚体")
+    edges: dict[tuple[tuple[float, float, float], tuple[float, float, float]], int] = {}
+    for tri in tris:
+        v0, v1, v2 = (tuple(np.round(v, 9).tolist()) for v in tri)
+        if v0 == v1 or v1 == v2 or v2 == v0:
+            raise ValueError(f"{stl_path.name} 包含退化三角面片")
+        for a, b in ((v0, v1), (v1, v2), (v2, v0)):
+            edges[(a, b)] = edges.get((a, b), 0) + 1
+    for (a, b), count in edges.items():
+        if count != 1 or edges.get((b, a), 0) != 1:
+            raise ValueError(f"{stl_path.name} 非闭合或面片定向不一致，无法可靠积分惯量")
+
+
 def _validate_paxini_meshes(paxini_export_dir: Path) -> None:
-    """在修改输出目录前核对 PaXini 源 STL 的存在性、封闭惯量、碰撞包络与 MuJoCo 编译有效性。"""
+    """在修改输出目录前核对 PaXini 源 STL 的存在性、闭合惯量、碰撞包络与 MuJoCo 编译有效性。"""
     sensor_stl = paxini_export_dir / "paxini_m2824.stl"
     adapter_stl = paxini_export_dir / "paxini_m2824_adapter.stl"
     for src in (sensor_stl, adapter_stl):
         if not src.is_file():
             raise FileNotFoundError(f"缺少 PaXini 导出网格文件: {src}")
+    _assert_closed_manifold_stl(adapter_stl)
     _stl_polyhedral_props(adapter_stl)
     c_h, s_h = np.asarray(PAXINI_M2824_HOUSING_POS), np.asarray(PAXINI_M2824_HOUSING_SIZE)
     c_p, s_p = np.asarray(PAXINI_M2824_PAD_POS), np.asarray(PAXINI_M2824_PAD_SIZE)

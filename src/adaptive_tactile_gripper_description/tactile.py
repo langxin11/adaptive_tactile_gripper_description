@@ -123,11 +123,13 @@ def add_tactile_contact_pairs(
 
 @dataclass(frozen=True, slots=True)
 class _HullGeometry:
-    indices: np.ndarray
+    seg_starts: np.ndarray
+    seg_ends: np.ndarray
     vertices: np.ndarray
     edges: np.ndarray
     edge_sq: np.ndarray
     inward: np.ndarray
+    is_collinear: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -172,13 +174,15 @@ def _grid_indices(layout: dict[str, Any]) -> np.ndarray:
     return indices
 
 
-def _convex_hull_indices(xy: np.ndarray) -> np.ndarray:
-    """Return the counterclockwise hull of the projected taxels."""
+def _convex_hull_indices(xy: np.ndarray) -> tuple[np.ndarray, bool]:
+    """Return the counterclockwise hull (preserving collinear edge points) and collinearity flag."""
     points, indices = np.unique(xy, axis=0, return_index=True)
     if len(points) <= 2:
-        return indices
+        return indices, True
 
     sorted_xy = points.tolist()
+    scale = float(np.ptp(points, axis=0).max())
+    eps = 1e-12 * scale * scale
 
     def half_hull(order: range) -> list[int]:
         half: list[int] = []
@@ -187,7 +191,7 @@ def _convex_hull_indices(xy: np.ndarray) -> np.ndarray:
             while len(half) >= 2:
                 ax, ay = sorted_xy[half[-2]]
                 bx, by = sorted_xy[half[-1]]
-                if (bx - ax) * (y - ay) - (by - ay) * (x - ax) > 0:
+                if (bx - ax) * (y - ay) - (by - ay) * (x - ax) >= -eps:
                     break
                 half.pop()
             half.append(i)
@@ -195,19 +199,30 @@ def _convex_hull_indices(xy: np.ndarray) -> np.ndarray:
 
     lo = half_hull(range(len(points)))
     hi = half_hull(range(len(points) - 1, -1, -1))
-    return indices[lo[:-1] + hi[:-1]]
+    if len(lo) == len(points) and len(hi) == len(points):
+        return indices[lo], True
+    return indices[lo[:-1] + hi[:-1]], False
 
 
 def _build_hull_geometry(xy: np.ndarray) -> _HullGeometry:
-    hull = _convex_hull_indices(xy)
-    vertices = xy[hull]
+    hull, is_collinear = _convex_hull_indices(xy)
     if len(hull) <= 1:
         empty = np.empty((0, 2), dtype=np.float64)
-        return _HullGeometry(hull, vertices, empty, np.empty(0, dtype=np.float64), empty)
-    edges = np.roll(vertices, -1, axis=0) - vertices
+        empty_idx = np.empty(0, dtype=np.intp)
+        return _HullGeometry(
+            empty_idx, empty_idx, empty, empty, np.empty(0, dtype=np.float64), empty, True
+        )
+    if is_collinear:
+        seg_starts = hull[:-1]
+        seg_ends = hull[1:]
+    else:
+        seg_starts = hull
+        seg_ends = np.roll(hull, -1)
+    vertices = xy[seg_starts]
+    edges = xy[seg_ends] - vertices
     edge_sq = np.einsum("ij,ij->i", edges, edges)
     inward = np.column_stack((-edges[:, 1], edges[:, 0]))
-    return _HullGeometry(hull, vertices, edges, edge_sq, inward)
+    return _HullGeometry(seg_starts, seg_ends, vertices, edges, edge_sq, inward, is_collinear)
 
 
 def _quat_wxyz_to_mat(quat: np.ndarray) -> np.ndarray:
@@ -248,19 +263,15 @@ def _match_pad_moment(
     hull_geom: _HullGeometry,
 ) -> np.ndarray:
     """Move the Gaussian centroid to the target or its closest point on the hull."""
-    hull = hull_geom.indices
-    if len(hull) <= 1:
+    if len(hull_geom.seg_starts) == 0:
         return weights
     vertices = hull_geom.vertices
     edges = hull_geom.edges
     edge_sq = hull_geom.edge_sq
     inward = hull_geom.inward
     target_rel = target - vertices
-    if len(hull) == 2 or np.any(np.einsum("ij,ij->i", target_rel, inward) < 0.0):
-        fractions = np.clip(np.einsum("ij,ij->i", target_rel, edges) / edge_sq, 0.0, 1.0)
-        residual = target_rel - fractions[:, None] * edges
-        edge_idx = int(np.argmin(np.einsum("ij,ij->i", residual, residual)))
-        endpoint_fraction = fractions[edge_idx]
+    if hull_geom.is_collinear or np.any(np.einsum("ij,ij->i", target_rel, inward) < 0.0):
+        hit = target
         blend = 1.0
     else:
         mean = weights @ xy
@@ -270,18 +281,22 @@ def _match_pad_moment(
         # Extend the centroid-to-target ray to the hull. Mixing in the force
         # at that intersection corrects the moment with nonnegative weights.
         approach = -(inward @ direction)
-        mean_dist = np.einsum("ij,ij->i", mean - vertices, inward)
-        steps = np.full(len(hull), np.inf)
+        mean_dist = np.maximum(np.einsum("ij,ij->i", mean - vertices, inward), 0.0)
+        steps = np.full(len(vertices), np.inf)
         np.divide(mean_dist, approach, out=steps, where=approach > 0.0)
-        edge_idx = int(np.argmin(steps))
-        step = max(1.0, steps[edge_idx])
+        step = max(1.0, float(np.min(steps)))
         blend = 1.0 / step
-        intersection = (mean - vertices[edge_idx]) + step * direction
-        endpoint_fraction = np.clip(intersection @ edges[edge_idx] / edge_sq[edge_idx], 0.0, 1.0)
+        hit = mean + step * direction
+
+    hit_rel = hit - vertices
+    fractions = np.clip(np.einsum("ij,ij->i", hit_rel, edges) / edge_sq, 0.0, 1.0)
+    residual = hit_rel - fractions[:, None] * edges
+    edge_idx = int(np.argmin(np.einsum("ij,ij->i", residual, residual)))
+    endpoint_fraction = float(fractions[edge_idx])
 
     matched = (1.0 - blend) * weights
-    matched[hull[edge_idx]] += blend * (1.0 - endpoint_fraction)
-    matched[hull[(edge_idx + 1) % len(hull)]] += blend * endpoint_fraction
+    matched[hull_geom.seg_starts[edge_idx]] += blend * (1.0 - endpoint_fraction)
+    matched[hull_geom.seg_ends[edge_idx]] += blend * endpoint_fraction
     return matched
 
 

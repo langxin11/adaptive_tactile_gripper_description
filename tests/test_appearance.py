@@ -290,6 +290,17 @@ def test_build_validates_paxini_meshes_before_mutating_output(tmp_path, descript
     assert marker_cfg.read_text(encoding="utf-8") == "# sentinel\n"
     assert marker_stl.read_bytes() == b"sentinel-stl"
 
+    # 缺少一个三角面片的非闭合转接垫块 STL 须在惯量积分和覆写输出前被拒绝。
+    shutil.copy2(root / "tools/paxini_export/paxini_m2824.stl", bad_dir / "paxini_m2824.stl")
+    adapter_bytes = (root / "tools/paxini_export/paxini_m2824_adapter.stl").read_bytes()
+    ntri = struct.unpack("<I", adapter_bytes[80:84])[0]
+    open_adapter = adapter_bytes[:80] + struct.pack("<I", ntri - 1) + adapter_bytes[84 + 50 :]
+    (bad_dir / "paxini_m2824_adapter.stl").write_bytes(open_adapter)
+    with pytest.raises(ValueError, match="非闭合"):
+        description_builder["build_all"](export_dir, out_root, paxini_export_dir=bad_dir)
+    assert marker_cfg.read_text(encoding="utf-8") == "# sentinel\n"
+    assert marker_stl.read_bytes() == b"sentinel-stl"
+
 
 def test_build_preserves_explicit_smooth_meshes(tmp_path, description_builder):
     """已有外观配置显式设置 smooth_meshes 时保留用户列表，缺失该键时回退到默认列表。"""

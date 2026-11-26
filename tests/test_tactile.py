@@ -668,3 +668,58 @@ def test_rigid_pad_refreshes_cache_when_site_transforms_change():
         model, data, "gripper/left_pad_collision", "gripper/left_taxel_001"
     )
     np.testing.assert_allclose(pad_rot.T @ world_sum, expected_local, atol=1e-11)
+
+
+def test_paxini_collinear_edge_taxel_receives_local_load():
+    """验证压在共线边缘测点（如 PaXini taxel 78）正上方时，受力集中在当地测点而非远处角点。"""
+    probe_scene = mujoco.MjSpec()
+    probe_scene.option.gravity = [0.0, 0.0, 0.0]
+    probe_scene.attach(
+        build_gripper_spec(
+            left_sensor="paxini_m2824", right_sensor=None, with_camera=False, fixed_base=True
+        ),
+        prefix="gripper/",
+        frame=probe_scene.worldbody.add_frame(),
+    )
+    # 先查出 taxel_078 在零位下的世界坐标，再在其外侧法向放一颗小探针球压向该测点。
+    ref_model = probe_scene.compile()
+    ref_data = mujoco.MjData(ref_model)
+    mujoco.mj_forward(ref_model, ref_data)
+    t78_pos = ref_data.site("gripper/left_taxel_078").xpos.copy()
+    t78_rot = ref_data.site("gripper/left_taxel_078").xmat.reshape(3, 3)
+    # 局部 +Z 指向垫背，故沿 -Z 偏置 1.8 mm 放置 r=2.0 mm 探针球产生 0.2 mm 法向压入。
+    probe_pos = t78_pos - 0.0018 * t78_rot[:, 2]
+    probe = probe_scene.worldbody.add_body(name="edge_probe", pos=probe_pos.tolist())
+    probe.add_geom(
+        name="edge_probe_geom",
+        type=mujoco.mjtGeom.mjGEOM_SPHERE,
+        size=[0.002, 0.0, 0.0],
+        contype=0,
+        conaffinity=2,
+    )
+    add_tactile_contact_pairs(
+        probe_scene,
+        "edge_probe_geom",
+        left_sensor="paxini_m2824",
+        right_sensor=None,
+        prefix="gripper/",
+    )
+    model = probe_scene.compile()
+    data = mujoco.MjData(model)
+    for _ in range(100):
+        mujoco.mj_step(model, data)
+
+    reader = TactileForceReader(
+        model,
+        left_sensor="paxini_m2824",
+        right_sensor=None,
+        prefix="gripper/",
+        target_geoms="edge_probe_geom",
+    )
+    forces = reader.read(data)["left"]
+    assert forces is not None
+    fz = forces[:, 2]
+    assert fz.sum() > 0.05
+    idx78 = next(i for i, t in enumerate(reader.layout["left"]["taxels"]) if t["id"] == 78)
+    assert int(np.argmax(fz)) == idx78
+    assert fz[idx78] > 0.8 * fz.sum()

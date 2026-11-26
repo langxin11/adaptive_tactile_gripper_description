@@ -25,6 +25,7 @@ _VALID_CONDIM = (1, 3, 4, 6)
 _TORSIONAL_FRICTION = 0.02
 _ROLLING_FRICTION = 0.001
 _MIN_COUPLE_VARIANCE_M2 = 1e-16
+_FRONT_FACE_NORMAL_MIN_DOT = 0.5
 
 
 def add_tactile_contact_pairs(
@@ -128,7 +129,8 @@ class _HullGeometry:
     vertices: np.ndarray
     edges: np.ndarray
     edge_sq: np.ndarray
-    inward: np.ndarray
+    inward_unit: np.ndarray
+    scale: float
     is_collinear: bool
 
 
@@ -206,11 +208,19 @@ def _convex_hull_indices(xy: np.ndarray) -> tuple[np.ndarray, bool]:
 
 def _build_hull_geometry(xy: np.ndarray) -> _HullGeometry:
     hull, is_collinear = _convex_hull_indices(xy)
+    scale = max(float(np.ptp(xy, axis=0).max()), 1e-6) if len(xy) else 1.0
     if len(hull) <= 1:
         empty = np.empty((0, 2), dtype=np.float64)
         empty_idx = np.empty(0, dtype=np.intp)
         return _HullGeometry(
-            empty_idx, empty_idx, empty, empty, np.empty(0, dtype=np.float64), empty, True
+            empty_idx,
+            empty_idx,
+            empty,
+            empty,
+            np.empty(0, dtype=np.float64),
+            empty,
+            scale,
+            True,
         )
     if is_collinear:
         seg_starts = hull[:-1]
@@ -221,8 +231,11 @@ def _build_hull_geometry(xy: np.ndarray) -> _HullGeometry:
     vertices = xy[seg_starts]
     edges = xy[seg_ends] - vertices
     edge_sq = np.einsum("ij,ij->i", edges, edges)
-    inward = np.column_stack((-edges[:, 1], edges[:, 0]))
-    return _HullGeometry(seg_starts, seg_ends, vertices, edges, edge_sq, inward, is_collinear)
+    edge_len = np.sqrt(edge_sq)
+    inward_unit = np.column_stack((-edges[:, 1], edges[:, 0])) / edge_len[:, None]
+    return _HullGeometry(
+        seg_starts, seg_ends, vertices, edges, edge_sq, inward_unit, scale, is_collinear
+    )
 
 
 def _quat_wxyz_to_mat(quat: np.ndarray) -> np.ndarray:
@@ -256,47 +269,120 @@ def _build_rigid_pad_cache(model: MjModel, site_ids: np.ndarray) -> _RigidPadCac
     )
 
 
+def _solve_2d_tilt(
+    lp: np.ndarray, u0: np.ndarray, u1: np.ndarray, tol_u: float
+) -> tuple[np.ndarray, float]:
+    l0, l1 = 0.0, 0.0
+
+    def eval_dual(a0: float, a1: float) -> tuple[float, np.ndarray]:
+        z = lp + a0 * u0 + a1 * u1
+        z_max = float(z.max())
+        exp_z = np.exp(z - z_max)
+        s = float(exp_z.sum())
+        return z_max + float(np.log(s)), exp_z / s
+
+    phi, w_sub = eval_dual(l0, l1)
+    for _ in range(35):
+        g0 = float(w_sub @ u0)
+        g1 = float(w_sub @ u1)
+        if g0 * g0 + g1 * g1 <= tol_u * tol_u:
+            return w_sub, float(np.hypot(g0, g1))
+        d0 = u0 - g0
+        d1 = u1 - g1
+        wd0 = w_sub * d0
+        h00 = float(wd0 @ d0)
+        h01 = float(wd0 @ d1)
+        h11 = float((w_sub * d1) @ d1)
+        tr = h00 + h11
+        if tr <= 1e-30:
+            break
+        reg = max(1e-12 * tr, 1e-24)
+        a = h00 + reg
+        c = h11 + reg
+        det = a * c - h01 * h01
+        if det <= 1e-36:
+            break
+        s0 = -(c * g0 - h01 * g1) / det
+        s1 = -(-h01 * g0 + a * g1) / det
+        snorm = float(np.hypot(s0, s1))
+        if snorm > 200.0:
+            s0 *= 200.0 / snorm
+            s1 *= 200.0 / snorm
+        slope = g0 * s0 + g1 * s1
+        if slope >= 0.0:
+            break
+        alpha = 1.0
+        accepted = False
+        for _ in range(20):
+            phi_new, w_new = eval_dual(l0 + alpha * s0, l1 + alpha * s1)
+            if np.isfinite(phi_new) and phi_new <= phi + 1e-4 * alpha * slope:
+                l0 += alpha * s0
+                l1 += alpha * s1
+                phi, w_sub = phi_new, w_new
+                accepted = True
+                break
+            alpha *= 0.5
+        if not accepted:
+            break
+    return w_sub, float(np.hypot(float(w_sub @ u0), float(w_sub @ u1)))
+
+
 def _match_pad_moment(
-    weights: np.ndarray,
+    log_prior: np.ndarray,
     xy: np.ndarray,
     target: np.ndarray,
     hull_geom: _HullGeometry,
 ) -> np.ndarray:
-    """Move the Gaussian centroid to the target or its closest point on the hull."""
+    """Compute local nonnegative KL-tilted weights matching target (or its hull projection)."""
     if len(hull_geom.seg_starts) == 0:
-        return weights
+        z_max = float(log_prior.max())
+        exp_z = np.exp(log_prior - z_max)
+        return exp_z / float(exp_z.sum())
+
     vertices = hull_geom.vertices
     edges = hull_geom.edges
     edge_sq = hull_geom.edge_sq
-    inward = hull_geom.inward
+    inward_unit = hull_geom.inward_unit
+    scale = hull_geom.scale
+
     target_rel = target - vertices
-    if hull_geom.is_collinear or np.any(np.einsum("ij,ij->i", target_rel, inward) < 0.0):
-        hit = target
-        blend = 1.0
-    else:
-        mean = weights @ xy
-        direction = target - mean
-        if np.linalg.norm(direction) <= 1e-12:
-            return weights
-        # Extend the centroid-to-target ray to the hull. Mixing in the force
-        # at that intersection corrects the moment with nonnegative weights.
-        approach = -(inward @ direction)
-        mean_dist = np.maximum(np.einsum("ij,ij->i", mean - vertices, inward), 0.0)
-        steps = np.full(len(vertices), np.inf)
-        np.divide(mean_dist, approach, out=steps, where=approach > 0.0)
-        step = max(1.0, float(np.min(steps)))
-        blend = 1.0 / step
-        hit = mean + step * direction
+    signed = np.einsum("ij,ij->i", target_rel, inward_unit)
+    if hull_geom.is_collinear or np.any(signed < 0.0):
+        fractions = np.clip(np.einsum("ij,ij->i", target_rel, edges) / edge_sq, 0.0, 1.0)
+        residual = target_rel - fractions[:, None] * edges
+        edge_idx = int(np.argmin(np.einsum("ij,ij->i", residual, residual)))
+        target = vertices[edge_idx] + float(fractions[edge_idx]) * edges[edge_idx]
+        signed = np.einsum("ij,ij->i", target - vertices, inward_unit)
 
-    hit_rel = hit - vertices
-    fractions = np.clip(np.einsum("ij,ij->i", hit_rel, edges) / edge_sq, 0.0, 1.0)
-    residual = hit_rel - fractions[:, None] * edges
-    edge_idx = int(np.argmin(np.einsum("ij,ij->i", residual, residual)))
-    endpoint_fraction = float(fractions[edge_idx])
+    active_mask = np.ones(len(xy), dtype=bool)
+    if not hull_geom.is_collinear:
+        face_tol = 1e-11 * scale
+        active_edges = np.flatnonzero(signed <= face_tol)
+        if active_edges.size:
+            for e_idx in active_edges:
+                d_face = (xy - vertices[e_idx]) @ inward_unit[e_idx]
+                active_mask &= d_face <= face_tol
+            if not np.any(active_mask):
+                active_mask[:] = True
 
-    matched = (1.0 - blend) * weights
-    matched[hull_geom.seg_starts[edge_idx]] += blend * (1.0 - endpoint_fraction)
-    matched[hull_geom.seg_ends[edge_idx]] += blend * endpoint_fraction
+    active_idx = np.flatnonzero(active_mask)
+    if len(active_idx) == 1:
+        matched = np.zeros(len(xy), dtype=np.float64)
+        matched[active_idx[0]] = 1.0
+        return matched
+
+    lp = log_prior[active_idx]
+    u = (xy[active_idx] - target) / scale
+    u0, u1 = u[:, 0], u[:, 1]
+    tol_u = 1e-11 / scale
+    w_sub, err_u = _solve_2d_tilt(lp, u0, u1, tol_u)
+    if err_u > 1e-9 / scale and not bool(np.all(np.isfinite(lp))):
+        # When an extreme tiny sigma underflows neighbor log-priors to -inf,
+        # retry with a sharp finite local prior so the target moment still matches.
+        w_sub, _ = _solve_2d_tilt(-50.0 * (u0 * u0 + u1 * u1), u0, u1, tol_u)
+
+    matched = np.zeros(len(xy), dtype=np.float64)
+    matched[active_idx] = w_sub
     return matched
 
 
@@ -306,9 +392,10 @@ class TactileForceReader:
     ``read(data)`` 按侧返回形状为 ``(N, 3)`` 的浮点数组（列顺序 ``[Fx, Fy, Fz]``，单位 N，表达在各测点
     ``site`` 局部坐标系下），测点顺序与 ``layout[side]["taxels"]`` 一致，无触觉的一侧返回 ``None``。
 
-    对 ``pad_sites``，用高斯权重分配接触力，并在首个测点的切平面内校正权重质心。
+    对 ``pad_sites``，仅统计作用于前感应面的接触（排除垫块侧面与背面接触），以高斯权重为先验，
+    在首个测点的切平面内通过局部非负指数倾斜校正权重质心。
     凸包内重构投影压力中心及平面力臂产生的一阶力矩，凸包外将接触点投影至最近的凸包边界。
-    权重非负且和为一，三维合力在同一坐标系内守恒（至浮点精度）。
+    权重非负且和为一，前感应面三维合力在同一坐标系内守恒（至浮点精度）。
     ``condim=4/6`` 的接触法向扭矩在垫面法向上的分量由高斯加权的零合力切向力偶重构，
     加权力臂方差不超过 1e-16 m² 时省略该力偶。``condim=6`` 的两个滚动力矩分量省略。
     对法向一致的平垫，纯压缩时各测点 ``Fz >= 0``。
@@ -432,7 +519,7 @@ class TactileForceReader:
     def read(self, data: MjData) -> dict[str, np.ndarray | None]:
         """读取当前帧左右指尖的 ``(N, 3)`` 局部三轴触觉力 ``[Fx, Fy, Fz]``（单位 N）。"""
         result: dict[str, np.ndarray | None] = {}
-        pad_contacts: dict[str, list[tuple[np.ndarray, np.ndarray, np.ndarray]]] = {
+        pad_contacts: dict[str, list[tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]] = {
             "left": [],
             "right": [],
         }
@@ -476,6 +563,7 @@ class TactileForceReader:
                                 np.asarray(con.pos, dtype=np.float64).copy(),
                                 force_world,
                                 sign * twist_on_g2_world,
+                                sign * contact_frame[0],
                             )
                         )
 
@@ -484,6 +572,13 @@ class TactileForceReader:
                 continue
             spec = self._sides[side]
             assert spec is not None
+            pad_gid = spec.pad_geom_id
+            assert pad_gid is not None
+            box_half_z = (
+                float(self._model.geom_size[pad_gid, 2])
+                if int(self._model.geom_type[pad_gid]) == int(_mj.mjtGeom.mjGEOM_BOX)
+                else None
+            )
             rigid = self._rigid_pads[side]
             if rigid is not None:
                 cur_pos = np.asarray(self._model.site_pos[spec.site_ids], dtype=np.float64)
@@ -503,19 +598,25 @@ class TactileForceReader:
                 xy = rigid.xy
                 hull_geom = rigid.hull
                 taxel_forces = np.zeros_like(local_pos)
-                for pos, force, twist in contacts:
+                for pos, force, twist, normal_into_pad in contacts:
+                    if float(normal_into_pad @ normal) <= _FRONT_FACE_NORMAL_MIN_DOT:
+                        continue
                     pos_local = (pos - origin) @ pad_rot
+                    if box_half_z is not None and pos_local[2] > box_half_z:
+                        continue
                     delta = local_pos - pos_local
                     sq_dist = np.einsum("ij,ij->i", delta, delta)
                     distance = np.sqrt(sq_dist - sq_dist.min())
                     with np.errstate(over="ignore", under="ignore"):
-                        gaussian = np.exp(-0.5 * (distance / self._pad_sigma_m) ** 2)
-                    gaussian /= gaussian.sum()
-                    weights = _match_pad_moment(gaussian, xy, pos_local[:2], hull_geom)
+                        log_prior = -0.5 * (distance / self._pad_sigma_m) ** 2
+                    weights = _match_pad_moment(log_prior, xy, pos_local[:2], hull_geom)
                     taxel_forces += weights[:, None] * (force @ pad_rot)
 
                     twist_z = twist @ normal
                     if twist_z != 0.0:
+                        with np.errstate(over="ignore", under="ignore"):
+                            gaussian = np.exp(log_prior)
+                        gaussian /= gaussian.sum()
                         offset = xy - gaussian @ xy
                         weighted_offset = gaussian[:, None] * offset
                         variance = np.sum(weighted_offset * offset)
@@ -538,22 +639,29 @@ class TactileForceReader:
             xy = (site_pos - site_pos[0]) @ tangent
             hull_geom = _build_hull_geometry(xy)
             taxel_forces = np.zeros_like(site_pos)
-            for pos, force, twist in contacts:
+            for pos, force, twist, normal_into_pad in contacts:
+                if float(normal_into_pad @ normal) <= _FRONT_FACE_NORMAL_MIN_DOT:
+                    continue
+                pos_local = (pos - site_pos[0]) @ pad_rot
+                if box_half_z is not None and pos_local[2] > box_half_z:
+                    continue
                 delta = site_pos - pos
                 sq_dist = np.einsum("ij,ij->i", delta, delta)
                 # Scaling the distance avoids squaring a tiny sigma. Overflow
                 # in the exponent gives zero weight; the closest site has weight 1.
                 distance = np.sqrt(sq_dist - sq_dist.min())
                 with np.errstate(over="ignore", under="ignore"):
-                    gaussian = np.exp(-0.5 * (distance / self._pad_sigma_m) ** 2)
-                gaussian /= gaussian.sum()
-                weights = _match_pad_moment(gaussian, xy, (pos - site_pos[0]) @ tangent, hull_geom)
+                    log_prior = -0.5 * (distance / self._pad_sigma_m) ** 2
+                weights = _match_pad_moment(log_prior, xy, pos_local[:2], hull_geom)
                 taxel_forces += weights[:, None] * (force @ pad_rot)
 
                 twist_z = twist @ normal
                 if twist_z != 0.0:
                     # Rotate the centered moment arms by 90 degrees to get
                     # zero net shear and a moment proportional to the variance.
+                    with np.errstate(over="ignore", under="ignore"):
+                        gaussian = np.exp(log_prior)
+                    gaussian /= gaussian.sum()
                     offset = xy - gaussian @ xy
                     weighted_offset = gaussian[:, None] * offset
                     variance = np.sum(weighted_offset * offset)

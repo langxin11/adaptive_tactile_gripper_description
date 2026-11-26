@@ -452,6 +452,13 @@ def _load_paxini_taxels(path: Path) -> list[dict[str, object]]:
             )
         ):
             raise ValueError(f"{path} 中 id={taxel_id} 的 pos_m 必须包含 3 个有限数值")
+        x, y, z = float(pos[0]), float(pos[1]), float(pos[2])
+        if (
+            abs(x - PAXINI_M2824_PAD_POS[0]) > PAXINI_M2824_PAD_SIZE[0] + 1e-4
+            or abs(y - PAXINI_M2824_PAD_POS[1]) > PAXINI_M2824_PAD_SIZE[1] + 1e-4
+            or abs(z - PAXINI_M2824_TIP_PROTRUSION_M) > 5e-4
+        ):
+            raise ValueError(f"{path} 中 id={taxel_id} 的 pos_m 超出感应面范围：{pos}")
     return taxels
 
 
@@ -1040,6 +1047,7 @@ def _build_paxini_m2824_mjcf(
                 "name": f"taxel_{tid:03d}",
                 "pos": _fmt_vec(pos_m),
                 "quat": "0 1 0 0",
+                "size": "0.0006",
             },
         )
     ET.SubElement(

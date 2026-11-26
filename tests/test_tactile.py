@@ -644,7 +644,7 @@ def test_rigid_pad_refreshes_cache_when_site_transforms_change():
 
     before = reader.read(data)["left"]
     assert before is not None
-    peak_idx = int(np.argmax(before[:, 2]))
+    peak_idx = int(np.argmax(before[1:, 2])) + 1
     assert before[peak_idx, 2] > 1e-3
 
     # 将受压峰值测点的局部坐标系翻转 180° 并微调位置，再刷新前向运动学。
@@ -670,8 +670,9 @@ def test_rigid_pad_refreshes_cache_when_site_transforms_change():
     np.testing.assert_allclose(pad_rot.T @ world_sum, expected_local, atol=1e-11)
 
 
-def test_paxini_collinear_edge_taxel_receives_local_load():
-    """验证压在共线边缘测点（如 PaXini taxel 78）正上方时，受力集中在当地测点而非远处角点。"""
+@pytest.mark.parametrize("taxel_id", [39, 78])
+def test_paxini_edge_taxel_receives_local_load(taxel_id):
+    """验证压在共线及微内缩边缘测点（taxel 39 / 78）正上方时，受力集中在当地测点且压力中心一致。"""
     probe_scene = mujoco.MjSpec()
     probe_scene.option.gravity = [0.0, 0.0, 0.0]
     probe_scene.attach(
@@ -681,14 +682,13 @@ def test_paxini_collinear_edge_taxel_receives_local_load():
         prefix="gripper/",
         frame=probe_scene.worldbody.add_frame(),
     )
-    # 先查出 taxel_078 在零位下的世界坐标，再在其外侧法向放一颗小探针球压向该测点。
     ref_model = probe_scene.compile()
     ref_data = mujoco.MjData(ref_model)
     mujoco.mj_forward(ref_model, ref_data)
-    t78_pos = ref_data.site("gripper/left_taxel_078").xpos.copy()
-    t78_rot = ref_data.site("gripper/left_taxel_078").xmat.reshape(3, 3)
-    # 局部 +Z 指向垫背，故沿 -Z 偏置 1.8 mm 放置 r=2.0 mm 探针球产生 0.2 mm 法向压入。
-    probe_pos = t78_pos - 0.0018 * t78_rot[:, 2]
+    site_name = f"gripper/left_taxel_{taxel_id:03d}"
+    t_pos = ref_data.site(site_name).xpos.copy()
+    t_rot = ref_data.site(site_name).xmat.reshape(3, 3)
+    probe_pos = t_pos - 0.0018 * t_rot[:, 2]
     probe = probe_scene.worldbody.add_body(name="edge_probe", pos=probe_pos.tolist())
     probe.add_geom(
         name="edge_probe_geom",
@@ -720,6 +720,69 @@ def test_paxini_collinear_edge_taxel_receives_local_load():
     assert forces is not None
     fz = forces[:, 2]
     assert fz.sum() > 0.05
-    idx78 = next(i for i, t in enumerate(reader.layout["left"]["taxels"]) if t["id"] == 78)
-    assert int(np.argmax(fz)) == idx78
-    assert fz[idx78] > 0.8 * fz.sum()
+    idx = next(i for i, t in enumerate(reader.layout["left"]["taxels"]) if t["id"] == taxel_id)
+    assert int(np.argmax(fz)) == idx
+    assert fz[idx] > 0.25 * fz.sum()
+    assert float(model.site_size[model.site(site_name).id, 0]) < 0.0011
+    sids = np.array(reader.site_ids("left"), dtype=np.intp)
+    cop_world = np.sum(data.site_xpos[sids] * fz[:, None], axis=0) / fz.sum()
+    np.testing.assert_allclose(cop_world, data.site(site_name).xpos, atol=5e-5)
+
+
+@pytest.mark.parametrize("contact_side", ["rear_lip", "side_wall"])
+def test_paxini_excludes_side_and_rear_pad_contacts(contact_side):
+    """验证作用于 pad_collision 背面裸露唇边或侧壁的接触不会误报到前感应面阵列。"""
+    scene = mujoco.MjSpec()
+    scene.option.gravity = [0.0, 0.0, 0.0]
+    scene.attach(
+        build_gripper_spec(
+            left_sensor="paxini_m2824", right_sensor=None, with_camera=False, fixed_base=True
+        ),
+        prefix="gripper/",
+        frame=scene.worldbody.add_frame(),
+    )
+    ref_model = scene.compile()
+    ref_data = mujoco.MjData(ref_model)
+    mujoco.mj_forward(ref_model, ref_data)
+    pad_gid = ref_model.geom("gripper/left_pad_collision").id
+    pad_pos = ref_data.geom_xpos[pad_gid].copy()
+    pad_rot = ref_data.geom_xmat[pad_gid].reshape(3, 3)
+    half = ref_model.geom_size[pad_gid]
+    if contact_side == "rear_lip":
+        local_offset = np.array([0.0125, 0.0, -(half[2] + 0.0016)])
+    else:
+        local_offset = np.array([0.0, half[1] + 0.0016, 0.0])
+    probe = scene.worldbody.add_body(
+        name="side_rear_probe", pos=(pad_pos + pad_rot @ local_offset).tolist()
+    )
+    probe.add_geom(
+        name="side_rear_probe_geom",
+        type=mujoco.mjtGeom.mjGEOM_SPHERE,
+        size=[0.002, 0.0, 0.0],
+        contype=0,
+        conaffinity=2,
+    )
+    add_tactile_contact_pairs(
+        scene,
+        "side_rear_probe_geom",
+        left_sensor="paxini_m2824",
+        right_sensor=None,
+        prefix="gripper/",
+    )
+    model = scene.compile()
+    data = mujoco.MjData(model)
+    for _ in range(100):
+        mujoco.mj_step(model, data)
+
+    probe_gid = model.geom("side_rear_probe_geom").id
+    assert any(probe_gid in (c.geom1, c.geom2) for c in data.contact)
+    reader = TactileForceReader(
+        model,
+        left_sensor="paxini_m2824",
+        right_sensor=None,
+        prefix="gripper/",
+        target_geoms="side_rear_probe_geom",
+    )
+    forces = reader.read(data)["left"]
+    assert forces is not None
+    np.testing.assert_array_equal(forces, np.zeros((135, 3)))

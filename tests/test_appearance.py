@@ -168,7 +168,7 @@ def description_builder():
 
 def test_paxini_taxel_export_preserves_valid_order(description_builder, tmp_path):
     path = tmp_path / "taxels.json"
-    taxels = [{"id": i, "pos_m": [0, 0.001, -0.002]} for i in range(135, 0, -1)]
+    taxels = [{"id": i, "pos_m": [0, 0.001, 0.0037]} for i in range(135, 0, -1)]
     path.write_text(json.dumps(taxels))
     assert description_builder["_load_paxini_taxels"](path) == taxels
 
@@ -193,6 +193,8 @@ def test_paxini_taxel_export_preserves_valid_order(description_builder, tmp_path
         (0, {"id": 1, "pos_m": [0, 0, float("nan")]}, "pos_m"),
         (0, {"id": 1, "pos_m": [0, 0, float("inf")]}, "pos_m"),
         (0, {"id": 1, "pos_m": [0, 0, 10**400]}, "pos_m"),
+        (0, {"id": 1, "pos_m": [14.3, 0.0, 3.7]}, "感应面范围"),
+        (0, {"id": 1, "pos_m": [0.0, 0.0, 0.0]}, "感应面范围"),
     ],
 )
 def test_build_rejects_invalid_paxini_taxel_export(
@@ -203,7 +205,7 @@ def test_build_rejects_invalid_paxini_taxel_export(
     (export_dir / "raw_gripper.xml").write_text("<mujoco/>")
     paxini_export_dir = tmp_path / "paxini_export"
     paxini_export_dir.mkdir()
-    taxels = [{"id": i, "pos_m": [0, 0, 0]} for i in range(1, 136)]
+    taxels = [{"id": i, "pos_m": [0.0, 0.0, 0.0037]} for i in range(1, 136)]
     if index is None:
         taxels = item
     else:

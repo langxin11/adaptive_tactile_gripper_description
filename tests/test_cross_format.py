@@ -589,6 +589,14 @@ def test_traceable_payload_and_tactile_layout():
     assert all("geom_name" not in taxel for taxel in paxini_layout["left"]["taxels"])
     assert paxini_layout["left"]["taxels"][0]["site_name"] == "gripper/left_taxel_001"
     assert paxini_layout["left"]["taxels"][-1]["site_name"] == "gripper/left_taxel_135"
+    for side_layout in (layout["right"], paxini_layout["left"]):
+        assert all(
+            type(coord) in (int, float)
+            for taxel in side_layout["taxels"]
+            for coord in taxel["pos_m"]
+        )
+        coords = np.asarray([taxel["pos_m"] for taxel in side_layout["taxels"]])
+        assert coords.dtype.kind == "f"
     assert get_closure_jacobian(0.0) == pytest.approx(0.035355339059)
     q, step = 0.75, 1e-5
     numeric = (

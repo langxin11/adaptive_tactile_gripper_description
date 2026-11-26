@@ -90,13 +90,16 @@ xacro "$(ros2 pkg prefix adaptive_tactile_gripper_description)/share/adaptive_ta
 
 本描述包声明 `mujoco>=3.10.0,<5`，与当前下游锁定的 3.10.0 有交集。下游双 PTS 配置可以将 `model` 指向任一预生成整机 MJCF。载入 XML 时按原有流程删除 `base_freejoint` 后再挂载到载体或 FR3 法兰。
 
-在 `tactile_grasp/pyproject.toml` 中与 `papillarray-pts` 同样以固定 Git 标签引入（并经 `uv lock` 锁定哈希）：
+在 `tactile_grasp/pyproject.toml` 中与 `papillarray-pts` 同样以固定 Git 引用引入（并经 `uv lock` 锁定哈希）：
 
 ```toml
 dependencies = [
     # 其余已有依赖
-    # v0.2.0 标签发布后可用
+    # 仅需 pts_2_0 / flat_pad 及外观预设时，可固定到 v0.2.0 标签：
     "adaptive-tactile-gripper-description @ git+https://github.com/langxin11/adaptive_tactile_gripper_description.git@v0.2.0",
+    # 如需使用 paxini_m2824、1.7 rad 行程及下文 add_tactile_contact_pairs / TactileForceReader，
+    # 请改用包含本特性的主干提交或后续发布标签（并经 uv lock 锁定提交哈希）：
+    # "adaptive-tactile-gripper-description @ git+https://github.com/langxin11/adaptive_tactile_gripper_description.git@main",
 ]
 ```
 
@@ -115,6 +118,8 @@ dependencies = [
 双指总闭合雅可比在全开时从旧版的 `0.0424264 m/rad` 变为 B1 的 `0.0353553 m/rad`。力矩到夹持力的换算应使用当前实际曲柄角对应的 `get_closure_jacobian(q_rad)`，同时更新 FR3 的 TCP 偏置（沿法兰 +Z 增加 6 mm）。
 
 ### 2.3 动态组合仿真场景
+
+> 下述示例包含 `paxini_m2824` 模组与 `add_tactile_contact_pairs` / `TactileForceReader` 接口，需使用包含该特性的仓库提交或后续发布标签（见 2.1 节注释）；若仍锁定 `v0.2.0` 标签，请仅使用 `pts_2_0` / `flat_pad` 及 `build_gripper_spec`、`get_stroke_limits`、`get_tactile_layout`。
 
 ```python
 from adaptive_tactile_gripper_description import (
@@ -168,7 +173,7 @@ reader = TactileForceReader(
 
 ### 2.4 外观与场景挂载
 
-外观参数 `appearance` 与查询接口 `list_appearances()` 自 0.2.0 起可用。依赖示例固定到 v0.2.0 标签，发布后可用。
+外观参数 `appearance` 与查询接口 `list_appearances()` 自 `v0.2.0` 标签起可用。
 
 `build_gripper_spec(appearance="realistic")` 和 `build_gripper_spec(appearance="cad")` 在内存中为底盘、两侧指尖与相机设置材质。省略参数时，接口沿用资产自带的预设。通过 `list_appearances()` 查询可用名称。MuJoCo 挂载模组时为材质名添加 `left_`、`right_` 或 `cam_` 前缀，因此混装时也能定位材质类别。
 

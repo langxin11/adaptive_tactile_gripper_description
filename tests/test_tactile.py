@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import get_type_hints
+from typing import Any, get_type_hints
 
 import mujoco
 import numpy as np
@@ -89,7 +89,7 @@ def test_tactile_type_annotations():
     assert get_type_hints(TactileForceReader.__init__)["model"] is mujoco.MjModel
     assert get_type_hints(TactileForceReader.read)["data"] is mujoco.MjData
     assert get_type_hints(TactileForceReader.__init__)["target_geoms"] == (
-        str | int | Sequence[str | int] | None
+        str | int | np.integer[Any] | Sequence[str | int | np.integer[Any]] | None
     )
 
 
@@ -528,7 +528,12 @@ def test_paxini_spatial_localization_target_filter_and_read_grid():
         )
         np.testing.assert_allclose(pf["left"].sum(axis=0), expected_probe_only, atol=1e-12)
         probe_gid = pm.geom("probe_geom").id
-        for target in (probe_gid, ["probe_geom", probe_gid]):
+        for target in (
+            probe_gid,
+            np.int64(probe_gid),
+            np.int32(probe_gid),
+            ["probe_geom", np.int64(probe_gid)],
+        ):
             equivalent = TactileForceReader(
                 pm,
                 left_sensor="paxini_m2824",
@@ -565,6 +570,11 @@ def test_tactile_helper_validation_errors():
         TactileForceReader(
             model, left_sensor="flat_pad", right_sensor=None, target_geoms=[model.ngeom]
         )
+    for bad_target in (True, [False]):
+        with pytest.raises(TypeError, match="target_geoms"):
+            TactileForceReader(
+                model, left_sensor="flat_pad", right_sensor=None, target_geoms=bad_target
+            )
 
     reader = TactileForceReader(model, left_sensor="flat_pad", right_sensor=None, prefix="gripper/")
     assert reader.read(data) == {"left": None, "right": None}

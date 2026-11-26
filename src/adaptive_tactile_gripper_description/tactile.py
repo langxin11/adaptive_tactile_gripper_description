@@ -245,7 +245,11 @@ class TactileForceReader:
         right_sensor: str | None = "pts_2_0",
         prefix: str = "",
         pad_sigma_m: float = 0.0025,
-        target_geoms: str | int | Sequence[str | int] | None = None,
+        target_geoms: str
+        | int
+        | np.integer[Any]
+        | Sequence[str | int | np.integer[Any]]
+        | None = None,
     ) -> None:
         if pad_sigma_m <= 0.0 or not np.isfinite(pad_sigma_m):
             raise ValueError(f"pad_sigma_m 必须为有限正数，当前为 {pad_sigma_m!r}")
@@ -310,18 +314,26 @@ class TactileForceReader:
 
     @classmethod
     def _resolve_target_geoms(
-        cls, model: MjModel, target_geoms: str | int | Sequence[str | int]
+        cls,
+        model: MjModel,
+        target_geoms: str | int | np.integer[Any] | Sequence[str | int | np.integer[Any]],
     ) -> frozenset[int]:
         resolved: set[int] = set()
-        items = (target_geoms,) if isinstance(target_geoms, (str, int)) else target_geoms
+        if isinstance(target_geoms, bool):
+            raise TypeError(f"target_geoms 仅支持 geom 名称或整数 ID，收到 {target_geoms!r}")
+        items = (
+            (target_geoms,) if isinstance(target_geoms, (str, int, np.integer)) else target_geoms
+        )
         for item in items:
             if isinstance(item, str):
                 resolved.add(cls._require_id(model, _mj.mjtObj.mjOBJ_GEOM, item))
-            else:
+            elif isinstance(item, (int, np.integer)) and not isinstance(item, bool):
                 gid = int(item)
                 if gid < 0 or gid >= int(model.ngeom):
                     raise ValueError(f"target_geoms 包含越界 geom ID：{gid}")
                 resolved.add(gid)
+            else:
+                raise TypeError(f"target_geoms 仅支持 geom 名称或整数 ID，收到 {item!r}")
         return frozenset(resolved)
 
     @property

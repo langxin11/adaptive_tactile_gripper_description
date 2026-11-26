@@ -2331,7 +2331,7 @@ default_configuration:
     ]
     for item in taxels_spec:
         pts_lines.append(
-            f"  - {{row: {item['row']}, col: {item['col']}, pos_m: {item['pos_m']}, radius_m: {item['radius_m']}}}"
+            f"  - {flow({'row': item['row'], 'col': item['col'], 'pos_m': item['pos_m'], 'radius_m': item['radius_m']})}"
         )
     (config_dir / "sensors" / "pts_2_0.yaml").write_text(
         "\n".join(pts_lines) + "\n", encoding="utf-8"
@@ -2380,7 +2380,7 @@ contact:
         "taxels_in_sensor_mount:",
     ]
     for item in paxini_taxels:
-        paxini_lines.append(f"  - {{id: {item['id']}, pos_m: {item['pos_m']}}}")
+        paxini_lines.append(f"  - {flow({'id': item['id'], 'pos_m': item['pos_m']})}")
     (config_dir / "sensors" / "paxini_m2824.yaml").write_text(
         "\n".join(paxini_lines) + "\n", encoding="utf-8"
     )

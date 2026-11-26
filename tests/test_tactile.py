@@ -581,3 +581,40 @@ def test_tactile_helper_validation_errors():
     assert reader.site_ids("left") == ()
     with pytest.raises(ValueError, match="规则行列网格"):
         reader.read_grid(data, "left")
+
+
+def test_rigid_pad_reuses_cached_hull_across_reads(monkeypatch):
+    """验证刚性平垫在 __init__ 预计算凸包，read() 逐帧调用不再重复构建凸包。"""
+    scene = _attach_gripper_and_box(left_sensor="paxini_m2824", right_sensor="paxini_m2824")
+    add_tactile_contact_pairs(
+        scene,
+        "cube/target_cube_geom",
+        left_sensor="paxini_m2824",
+        right_sensor="paxini_m2824",
+        prefix="gripper/",
+    )
+    model = scene.compile()
+    data = mujoco.MjData(model)
+    reader = TactileForceReader(
+        model,
+        left_sensor="paxini_m2824",
+        right_sensor="paxini_m2824",
+        prefix="gripper/",
+    )
+
+    def _fail_if_rebuilt(_xy):
+        raise AssertionError("刚性平垫的凸包不应在 read() 期间重复计算")
+
+    monkeypatch.setattr(tactile, "_convex_hull_indices", _fail_if_rebuilt)
+    data.ctrl[0] = 0.25
+    for _ in range(400):
+        mujoco.mj_step(model, data)
+    forces = reader.read(data)
+    for side in ("left", "right"):
+        arr = forces[side]
+        assert arr is not None and arr.shape == (135, 3)
+        expected, ncon = _raw_pad_net_force_local(
+            model, data, f"gripper/{side}_pad_collision", f"gripper/{side}_taxel_001"
+        )
+        assert ncon >= 1 and expected[2] > 1.0
+        np.testing.assert_allclose(arr.sum(axis=0), expected, atol=1e-11)

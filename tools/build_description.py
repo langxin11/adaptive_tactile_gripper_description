@@ -120,6 +120,10 @@ PTS_2_0_MASS_KG = 0.0150
 FLAT_PAD_MASS_KG = 0.0100
 # PaXini PX6AX-GEN4-GR-M2824-Gripper 裸传感器 (8.5 g) + 6x M1.6x4 不锈钢螺钉 (0.32 g)
 PAXINI_M2824_SENSOR_MASS_KG = 0.00882
+PAXINI_M2824_HOUSING_POS = [-0.00205, 0.0, -0.004051]
+PAXINI_M2824_HOUSING_SIZE = [0.01236, 0.012013, 0.001751]
+PAXINI_M2824_PAD_POS = [-6.8e-05, 0.0, 0.00069875]
+PAXINI_M2824_PAD_SIZE = [0.014378, 0.012013, 0.00300125]
 
 # Intel RealSense D435i 官方裸机 72.0 g + 支架五金 (2x M4x8 + 2x M4x16 + 2x M4螺母 + 1/4-20螺钉)
 D435I_BARE_MASS_KG = 0.0720
@@ -451,6 +455,27 @@ def _load_paxini_taxels(path: Path) -> list[dict[str, object]]:
     return taxels
 
 
+def _validate_paxini_meshes(paxini_export_dir: Path) -> None:
+    """在修改输出目录前核对 PaXini 源 STL 的存在性、封闭惯量与碰撞包络。"""
+    sensor_stl = paxini_export_dir / "paxini_m2824.stl"
+    adapter_stl = paxini_export_dir / "paxini_m2824_adapter.stl"
+    for src in (sensor_stl, adapter_stl):
+        if not src.is_file():
+            raise FileNotFoundError(f"缺少 PaXini 导出网格文件: {src}")
+    _stl_polyhedral_props(adapter_stl)
+    c_h, s_h = np.asarray(PAXINI_M2824_HOUSING_POS), np.asarray(PAXINI_M2824_HOUSING_SIZE)
+    c_p, s_p = np.asarray(PAXINI_M2824_PAD_POS), np.asarray(PAXINI_M2824_PAD_SIZE)
+    for src in (adapter_stl, sensor_stl):
+        verts = _stl_triangles(src).reshape(-1, 3)
+        if verts.size == 0:
+            raise ValueError(f"{src.name} 不包含任何三角面片")
+        covered = np.all(np.abs(verts - c_h) <= s_h + 1e-8, axis=1) | np.all(
+            np.abs(verts - c_p) <= s_p + 1e-8, axis=1
+        )
+        if not bool(covered.all()):
+            raise ValueError(f"{src.name} 存在超出碰撞盒包络的顶点")
+
+
 def _copy_paxini_meshes(paxini_export_dir: Path, out_meshes_dir: Path) -> None:
     """将 PaXini M2824 传感器与转接垫块 STL 复制到 meshes/paxini_m2824/ 子目录。"""
     sub_dir = out_meshes_dir / "paxini_m2824"
@@ -561,9 +586,9 @@ def _build_appearance_library(raw_root: ET.Element, out_root: Path) -> dict:
             **existing,
             "materials": {**bundled["materials"], **existing.get("materials", {})},
             "mesh_classes": {**bundled["mesh_classes"], **existing.get("mesh_classes", {})},
-            "smooth_meshes": list(
-                dict.fromkeys([*bundled["smooth_meshes"], *existing.get("smooth_meshes", ())])
-            ),
+            "smooth_meshes": list(existing["smooth_meshes"])
+            if "smooth_meshes" in existing
+            else list(bundled["smooth_meshes"]),
             "presets": presets,
         }
     else:
@@ -923,14 +948,14 @@ def _build_paxini_m2824_mjcf(
             },
         )
 
-    housing_pos = [-0.00205, 0.0, -0.004051]
-    housing_size = [0.01236, 0.012013, 0.001751]
+    housing_pos = PAXINI_M2824_HOUSING_POS
+    housing_size = PAXINI_M2824_HOUSING_SIZE
     housing = _add_collision_box(body, "sensor_housing_collision", housing_pos, housing_size)
     housing.set("contype", "4")
     housing.set("conaffinity", "1")
 
-    pad_pos = [-6.8e-05, 0.0, 0.00069875]
-    pad_size = [0.014378, 0.012013, 0.00300125]
+    pad_pos = PAXINI_M2824_PAD_POS
+    pad_size = PAXINI_M2824_PAD_SIZE
     ET.SubElement(
         body,
         "geom",
@@ -2399,6 +2424,7 @@ def build_all(
         raise FileNotFoundError(f"未找到导出文件: {raw_xml}")
 
     paxini_taxels = _load_paxini_taxels(paxini_export_dir / "taxels.json")
+    _validate_paxini_meshes(paxini_export_dir)
     raw_data = raw_xml.read_bytes()
     raw_root = ET.fromstring(raw_data)
     meshes_dir = out_root / "meshes"

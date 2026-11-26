@@ -216,6 +216,61 @@ def test_build_rejects_invalid_paxini_taxel_export(
     assert not out_root.exists()
 
 
+def test_build_validates_paxini_meshes_before_mutating_output(tmp_path, description_builder):
+    """缺省转接垫块或越界 STL 时，须在覆写已有输出目录之前失败。"""
+    import shutil
+
+    root = get_data_root()
+    export_dir = root / "tools/onshape_export"
+    if not (export_dir / "raw_gripper.xml").is_file():
+        pytest.skip("完整重建需要本地 Onshape 原始导出")
+
+    out_root = tmp_path / "existing_out"
+    marker_cfg = out_root / "config/appearance.yaml"
+    marker_stl = out_root / "meshes/paxini_m2824/paxini_m2824.stl"
+    marker_cfg.parent.mkdir(parents=True)
+    marker_stl.parent.mkdir(parents=True)
+    marker_cfg.write_text("# sentinel\n", encoding="utf-8")
+    marker_stl.write_bytes(b"sentinel-stl")
+
+    bad_dir = tmp_path / "bad_paxini"
+    bad_dir.mkdir()
+    shutil.copy2(root / "tools/paxini_export/taxels.json", bad_dir / "taxels.json")
+    shutil.copy2(root / "tools/paxini_export/paxini_m2824.stl", bad_dir / "paxini_m2824.stl")
+    with pytest.raises(FileNotFoundError, match="paxini_m2824_adapter.stl"):
+        description_builder["build_all"](export_dir, out_root, paxini_export_dir=bad_dir)
+    assert marker_cfg.read_text(encoding="utf-8") == "# sentinel\n"
+    assert marker_stl.read_bytes() == b"sentinel-stl"
+
+
+def test_build_preserves_explicit_smooth_meshes(tmp_path, description_builder):
+    """已有外观配置显式设置 smooth_meshes 时保留用户列表，缺失该键时回退到默认列表。"""
+    root = get_data_root()
+    raw_xml = root / "tools/onshape_export/raw_gripper.xml"
+    if not raw_xml.is_file():
+        pytest.skip("完整重建需要本地 Onshape 原始导出")
+    raw_root = ET.parse(raw_xml).getroot()
+
+    custom_out = tmp_path / "explicit_empty"
+    cfg_path = custom_out / "config/appearance.yaml"
+    cfg_path.parent.mkdir(parents=True)
+    existing = _library()
+    existing["smooth_meshes"] = []
+    cfg_path.write_text(yaml.safe_dump(existing), encoding="utf-8")
+    merged = description_builder["_build_appearance_library"](raw_root, custom_out)
+    assert merged["smooth_meshes"] == []
+    assert yaml.safe_load(cfg_path.read_text(encoding="utf-8"))["smooth_meshes"] == []
+
+    fallback_out = tmp_path / "omitted_key"
+    fb_path = fallback_out / "config/appearance.yaml"
+    fb_path.parent.mkdir(parents=True)
+    omitted = _library()
+    omitted.pop("smooth_meshes")
+    fb_path.write_text(yaml.safe_dump(omitted), encoding="utf-8")
+    merged_fb = description_builder["_build_appearance_library"](raw_root, fallback_out)
+    assert merged_fb["smooth_meshes"] == _library()["smooth_meshes"]
+
+
 def test_two_grippers_preserve_host_appearance():
     """双前缀挂载时，逐实例验证材质归属、闭环数量与宿主照明。"""
     host = mujoco.MjSpec.from_string("""<mujoco><visual><quality shadowsize="1024" offsamples="2"/>

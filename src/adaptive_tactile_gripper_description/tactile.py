@@ -122,12 +122,31 @@ def add_tactile_contact_pairs(
 
 
 @dataclass(frozen=True, slots=True)
+class _HullGeometry:
+    indices: np.ndarray
+    vertices: np.ndarray
+    edges: np.ndarray
+    edge_sq: np.ndarray
+    inward: np.ndarray
+
+
+@dataclass(frozen=True, slots=True)
+class _RigidPadCache:
+    local_pos: np.ndarray
+    xy: np.ndarray
+    hull: _HullGeometry
+    same_orientation: bool
+    rel_rot: np.ndarray | None
+
+
+@dataclass(frozen=True, slots=True)
 class _SideSpec:
     mode: str
     site_ids: np.ndarray
     grid_indices: np.ndarray | None
     geom_to_index: dict[int, int]
     pad_geom_id: int | None
+    rigid_pad: _RigidPadCache | None = None
 
 
 def _grid_indices(layout: dict[str, Any]) -> np.ndarray:
@@ -178,19 +197,61 @@ def _convex_hull_indices(xy: np.ndarray) -> np.ndarray:
     return indices[lo[:-1] + hi[:-1]]
 
 
+def _build_hull_geometry(xy: np.ndarray) -> _HullGeometry:
+    hull = _convex_hull_indices(xy)
+    vertices = xy[hull]
+    if len(hull) <= 1:
+        empty = np.empty((0, 2), dtype=np.float64)
+        return _HullGeometry(hull, vertices, empty, np.empty(0, dtype=np.float64), empty)
+    edges = np.roll(vertices, -1, axis=0) - vertices
+    edge_sq = np.einsum("ij,ij->i", edges, edges)
+    inward = np.column_stack((-edges[:, 1], edges[:, 0]))
+    return _HullGeometry(hull, vertices, edges, edge_sq, inward)
+
+
+def _quat_wxyz_to_mat(quat: np.ndarray) -> np.ndarray:
+    mat = np.empty(9, dtype=np.float64)
+    _mj.mju_quat2Mat(mat, np.asarray(quat, dtype=np.float64))
+    return mat.reshape(3, 3)
+
+
+def _build_rigid_pad_cache(model: MjModel, site_ids: np.ndarray) -> _RigidPadCache | None:
+    if len(site_ids) == 0:
+        return None
+    body_ids = np.asarray(model.site_bodyid[site_ids], dtype=np.intp)
+    if not bool(np.all(body_ids == body_ids[0])):
+        return None
+    pos_body = np.asarray(model.site_pos[site_ids], dtype=np.float64)
+    quats = np.asarray(model.site_quat[site_ids], dtype=np.float64)
+    rot_body = np.stack([_quat_wxyz_to_mat(q) for q in quats], axis=0)
+    pad_rot_body = rot_body[0]
+    local_pos = (pos_body - pos_body[0]) @ pad_rot_body
+    xy = local_pos[:, :2].copy()
+    rel_rot = np.einsum("ij,njk->nik", pad_rot_body.T, rot_body)
+    same_orientation = bool(np.allclose(rel_rot, np.eye(3, dtype=np.float64), atol=1e-12))
+    return _RigidPadCache(
+        local_pos=local_pos,
+        xy=xy,
+        hull=_build_hull_geometry(xy),
+        same_orientation=same_orientation,
+        rel_rot=None if same_orientation else rel_rot,
+    )
+
+
 def _match_pad_moment(
     weights: np.ndarray,
     xy: np.ndarray,
     target: np.ndarray,
-    hull: np.ndarray,
+    hull_geom: _HullGeometry,
 ) -> np.ndarray:
     """Move the Gaussian centroid to the target or its closest point on the hull."""
-    if len(hull) == 1:
+    hull = hull_geom.indices
+    if len(hull) <= 1:
         return weights
-    vertices = xy[hull]
-    edges = np.roll(vertices, -1, axis=0) - vertices
-    edge_sq = np.einsum("ij,ij->i", edges, edges)
-    inward = np.column_stack((-edges[:, 1], edges[:, 0]))
+    vertices = hull_geom.vertices
+    edges = hull_geom.edges
+    edge_sq = hull_geom.edge_sq
+    inward = hull_geom.inward
     target_rel = target - vertices
     if len(hull) == 2 or np.any(np.einsum("ij,ij->i", target_rel, inward) < 0.0):
         fractions = np.clip(np.einsum("ij,ij->i", target_rel, edges) / edge_sq, 0.0, 1.0)
@@ -300,6 +361,7 @@ class TactileForceReader:
                     grid_indices=None,
                     geom_to_index={},
                     pad_geom_id=pad_gid,
+                    rigid_pad=_build_rigid_pad_cache(model, site_ids),
                 )
             else:
                 raise ValueError(f"未知触觉布局模式 {mode!r}")
@@ -403,13 +465,50 @@ class TactileForceReader:
                 continue
             spec = self._sides[side]
             assert spec is not None
+            rigid = spec.rigid_pad
+            if rigid is not None:
+                sid0 = int(spec.site_ids[0])
+                origin = np.asarray(data.site_xpos[sid0], dtype=np.float64)
+                pad_rot = np.asarray(data.site_xmat[sid0], dtype=np.float64).reshape(3, 3)
+                normal = pad_rot[:, 2]
+                local_pos = rigid.local_pos
+                xy = rigid.xy
+                hull_geom = rigid.hull
+                taxel_forces = np.zeros_like(local_pos)
+                for pos, force, twist in contacts:
+                    pos_local = (pos - origin) @ pad_rot
+                    delta = local_pos - pos_local
+                    sq_dist = np.einsum("ij,ij->i", delta, delta)
+                    distance = np.sqrt(sq_dist - sq_dist.min())
+                    with np.errstate(over="ignore", under="ignore"):
+                        gaussian = np.exp(-0.5 * (distance / self._pad_sigma_m) ** 2)
+                    gaussian /= gaussian.sum()
+                    weights = _match_pad_moment(gaussian, xy, pos_local[:2], hull_geom)
+                    taxel_forces += weights[:, None] * (force @ pad_rot)
+
+                    twist_z = twist @ normal
+                    if twist_z != 0.0:
+                        offset = xy - gaussian @ xy
+                        weighted_offset = gaussian[:, None] * offset
+                        variance = np.sum(weighted_offset * offset)
+                        if variance > _MIN_COUPLE_VARIANCE_M2:
+                            couple = np.column_stack(
+                                (-weighted_offset[:, 1], weighted_offset[:, 0])
+                            )
+                            taxel_forces[:, :2] += (twist_z / variance) * couple
+                if not rigid.same_orientation:
+                    assert rigid.rel_rot is not None
+                    taxel_forces = np.einsum("nij,ni->nj", rigid.rel_rot, taxel_forces)
+                result[side] = taxel_forces
+                continue
+
             site_pos = np.asarray(data.site_xpos[spec.site_ids], dtype=np.float64)
             site_rot = np.asarray(data.site_xmat[spec.site_ids], dtype=np.float64).reshape(-1, 3, 3)
             pad_rot = site_rot[0]
             tangent = pad_rot[:, :2]
             normal = pad_rot[:, 2]
             xy = (site_pos - site_pos[0]) @ tangent
-            hull = _convex_hull_indices(xy)
+            hull_geom = _build_hull_geometry(xy)
             taxel_forces = np.zeros_like(site_pos)
             for pos, force, twist in contacts:
                 delta = site_pos - pos
@@ -420,7 +519,7 @@ class TactileForceReader:
                 with np.errstate(over="ignore", under="ignore"):
                     gaussian = np.exp(-0.5 * (distance / self._pad_sigma_m) ** 2)
                 gaussian /= gaussian.sum()
-                weights = _match_pad_moment(gaussian, xy, (pos - site_pos[0]) @ tangent, hull)
+                weights = _match_pad_moment(gaussian, xy, (pos - site_pos[0]) @ tangent, hull_geom)
                 taxel_forces += weights[:, None] * (force @ pad_rot)
 
                 twist_z = twist @ normal

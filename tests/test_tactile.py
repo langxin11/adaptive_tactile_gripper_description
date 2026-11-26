@@ -1144,6 +1144,17 @@ def test_add_tactile_contact_pairs_lazy_contact_defaults(monkeypatch):
         solimp=(0.75, 0.95, 0.0025, 0.5, 2.0),
     )
     assert len(added) == 1
+    # 全部接触对已存在时应直接视为幂等空操作，即使不传覆写也不触发缺省接触参数报错。
+    assert (
+        add_tactile_contact_pairs(
+            scene,
+            "cube/target_cube_geom",
+            left_sensor="paxini_m2824",
+            right_sensor=None,
+            prefix="gripper/",
+        )
+        == []
+    )
 
     base_kwargs = {
         "left_sensor": "paxini_m2824",
@@ -1158,3 +1169,65 @@ def test_add_tactile_contact_pairs_lazy_contact_defaults(monkeypatch):
         fresh_scene = _attach_gripper_and_box(left_sensor="paxini_m2824", right_sensor=None)
         with pytest.raises(ValueError, match=omitted):
             add_tactile_contact_pairs(fresh_scene, "cube/target_cube_geom", **kwargs)
+
+
+def test_pad_sites_off_center_recessed_array_selects_sensing_face(monkeypatch):
+    """验证自定义盒式垫的偏置内缩测点阵列仍按测点法向识别 +Z 感应面，不会误判为侧壁。"""
+    spec = mujoco.MjSpec()
+    spec.option.gravity = [0.0, 0.0, 0.0]
+    pad_body = spec.worldbody.add_body(name="custom_pad_body")
+    pad_body.add_geom(
+        name="custom_pad_geom",
+        type=mujoco.mjtGeom.mjGEOM_BOX,
+        size=[0.010, 0.010, 0.003],
+    )
+    # 测点靠近 +X 边缘 (x=9.7 mm, 97% 半宽) 且沿 +Z 微内缩 (z=2.8 mm, 93.3% 半厚)，法向朝向 -Z（垫内）。
+    taxel_positions = [
+        (0.0097, -0.001, 0.0028),
+        (0.0097, 0.001, 0.0028),
+    ]
+    for idx, pos in enumerate(taxel_positions, start=1):
+        pad_body.add_site(
+            name=f"custom_taxel_{idx:03d}",
+            pos=list(pos),
+            quat=[0.0, 1.0, 0.0, 0.0],
+            size=[0.0005, 0.0, 0.0],
+        )
+    probe = spec.worldbody.add_body(name="top_probe", pos=[0.005, 0.0, 0.0046])
+    probe.add_joint(name="probe_z", type=mujoco.mjtJoint.mjJNT_SLIDE, axis=[0.0, 0.0, 1.0])
+    probe.add_geom(
+        name="top_probe_geom", type=mujoco.mjtGeom.mjGEOM_SPHERE, size=[0.002, 0.0, 0.0], mass=0.05
+    )
+    model = spec.compile()
+    data = mujoco.MjData(model)
+    data.qfrc_applied[0] = -2.0
+    mujoco.mj_forward(model, data)
+
+    custom_layout = {
+        "left": {
+            "mode": "pad_sites",
+            "count": 2,
+            "pad_geom_name": "custom_pad_geom",
+            "site_quat_in_sensor_mount_wxyz": [0.0, 1.0, 0.0, 0.0],
+            "taxels": [
+                {"id": idx, "pos_m": list(pos), "site_name": f"custom_taxel_{idx:03d}"}
+                for idx, pos in enumerate(taxel_positions, start=1)
+            ],
+        },
+        "right": None,
+    }
+    monkeypatch.setattr(tactile, "get_tactile_layout", lambda *a, **kw: custom_layout)
+    reader = TactileForceReader(
+        model, left_sensor="custom_pad", right_sensor=None, target_geoms="top_probe_geom"
+    )
+    forces = reader.read(data)["left"]
+    assert forces is not None
+    expected_local, ncon = _raw_pad_net_force_local(
+        model,
+        data,
+        "custom_pad_geom",
+        "custom_taxel_001",
+        other_geom_id=model.geom("top_probe_geom").id,
+    )
+    assert ncon >= 1 and expected_local[2] > 0.1
+    np.testing.assert_allclose(forces.sum(axis=0), expected_local, atol=1e-11)

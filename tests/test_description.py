@@ -15,6 +15,7 @@ from adaptive_tactile_gripper_description import (
     get_mjcf_path,
     get_sensor_spec,
     get_specs,
+    get_stroke_limits,
     list_accessories,
     list_sensors,
 )
@@ -312,6 +313,13 @@ def test_empty_grasp_does_not_jam_and_reopens(left_sensor, right_sensor):
         assert q_eff < 0.02
 
 
+def _mesh_local_vertices(model: mujoco.MjModel, geom_id: int) -> np.ndarray:
+    mesh_id = int(model.geom_dataid[geom_id])
+    adr = int(model.mesh_vertadr[mesh_id])
+    num = int(model.mesh_vertnum[mesh_id])
+    return np.asarray(model.mesh_vert[adr : adr + num], dtype=np.float64)
+
+
 def test_unloaded_chassis_overshoot_stays_clear_of_opposing_slider():
     """验证空载底盘在 1 N·m 与满量程 4 N·m 急闭步进仿真中，曲柄轴套与对侧滑块保持正间隙。"""
     model = build_gripper_spec(
@@ -342,32 +350,57 @@ def test_unloaded_chassis_overshoot_stays_clear_of_opposing_slider():
             and model.mesh(model.geom_dataid[gid]).name == "mgn9_block"
         ]
         assert len(spacers) == 2 and len(blocks) == 1
+        block_verts = _mesh_local_vertices(model, blocks[0])
         for s_gid in spacers:
-            opposing_pairs.append((s_gid, blocks[0]))
+            opposing_pairs.append(
+                (s_gid, blocks[0], _mesh_local_vertices(model, s_gid), block_verts)
+            )
 
-    fromto = np.empty(6, dtype=float)
+    # 使用变换后网格顶点的分离轴（SAT）下界，兼容 MuJoCo 3.10 与 4.0（规避 3.10 mj_geomDistance 假零）。
+    sat_axes = [np.array([1.0, 0.0, 0.0]), np.array([0.0, 1.0, 0.0]), np.array([0.0, 0.0, 1.0])]
+    for deg in range(5, 180, 5):
+        rad = math.radians(deg)
+        sat_axes.append(np.array([math.cos(rad), math.sin(rad), 0.0]))
+    axes_mat = np.stack(sat_axes, axis=1)
+
     for torque in (1.0, 4.0):
         data = mujoco.MjData(model)
         data.ctrl[0] = torque
         min_clearance = float("inf")
         for _ in range(400):
             mujoco.mj_step(model, data)
-            for s_gid, b_gid in opposing_pairs:
-                dist = float(mujoco.mj_geomDistance(model, data, s_gid, b_gid, 1.0, fromto))
-                min_clearance = min(min_clearance, dist)
+            for s_gid, b_gid, vs_loc, vb_loc in opposing_pairs:
+                vs = vs_loc @ data.geom_xmat[s_gid].reshape(3, 3).T + data.geom_xpos[s_gid]
+                vb = vb_loc @ data.geom_xmat[b_gid].reshape(3, 3).T + data.geom_xpos[b_gid]
+                ps = vs @ axes_mat
+                pb = vb @ axes_mat
+                gaps = np.maximum(ps.min(axis=0) - pb.max(axis=0), pb.min(axis=0) - ps.max(axis=0))
+                min_clearance = min(min_clearance, float(gaps.max()))
         assert min_clearance > 0.0, (torque, min_clearance)
 
 
 @pytest.mark.parametrize("timestep", [0.004, 0.005])
-def test_attached_chassis_reopens_cleanly_at_non_default_timestep(timestep):
-    """验证挂载到宿主场景且使用非默认步长（4/5 ms）时，空载底盘急闭后反向张开稳定无发散。"""
+@pytest.mark.parametrize(
+    ("left_sensor", "right_sensor"),
+    [
+        (None, None),
+        ("pts_2_0", "pts_2_0"),
+        ("paxini_m2824", "paxini_m2824"),
+        ("pts_2_0", "paxini_m2824"),
+        ("flat_pad", "flat_pad"),
+    ],
+)
+def test_attached_gripper_reopens_cleanly_at_non_default_timestep(
+    timestep, left_sensor, right_sensor
+):
+    """验证挂载到宿主场景且使用 4/5 ms 步长时，空载与带指尖模组在 1/4 N·m 急闭后均不卡死并顺利张开。"""
     scene = mujoco.MjSpec()
     scene.option.timestep = timestep
     carrier = scene.worldbody.add_body(name="carrier", pos=[0.0, 0.0, 0.5])
     scene.attach(
         build_gripper_spec(
-            left_sensor=None,
-            right_sensor=None,
+            left_sensor=left_sensor,
+            right_sensor=right_sensor,
             with_camera=False,
             fixed_base=True,
         ),
@@ -375,6 +408,8 @@ def test_attached_chassis_reopens_cleanly_at_non_default_timestep(timestep):
         frame=carrier.add_frame(),
     )
     model = scene.compile()
+    limits = get_stroke_limits(left_sensor, right_sensor)
+    contact_slide = limits["first_contact_single_finger_closure_m"]
     steps_per_phase = round(1.0 / timestep)
     for close_torque in (1.0, 4.0):
         data = mujoco.MjData(model)
@@ -385,6 +420,13 @@ def test_attached_chassis_reopens_cleanly_at_non_default_timestep(timestep):
             assert data.time > prev_time
             assert np.all(np.isfinite(data.qacc))
             prev_time = float(data.time)
+        if contact_slide is not None:
+            assert data.ncon >= 1
+            total_slide = float(
+                data.joint("gripper/left_finger_slide").qpos[0]
+                + data.joint("gripper/right_finger_slide").qpos[0]
+            )
+            assert total_slide <= 2.0 * contact_slide + 0.0025
         data.ctrl[0] = -4.0
         for _ in range(steps_per_phase):
             mujoco.mj_step(model, data)

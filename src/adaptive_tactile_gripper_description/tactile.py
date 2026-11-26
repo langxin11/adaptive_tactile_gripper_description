@@ -85,6 +85,15 @@ def add_tactile_contact_pairs(
         else:
             raise ValueError(f"未知触觉布局模式 {mode!r}")
 
+        pending_pairs: list[tuple[int, int, str, str]] = [
+            (obj_idx, geom_idx, sensor_geom, obj_geom)
+            for obj_idx, obj_geom in enumerate(object_geoms)
+            for geom_idx, sensor_geom in enumerate(sensor_geoms)
+            if frozenset((sensor_geom, obj_geom)) not in existing_pairs
+        ]
+        if not pending_pairs:
+            continue
+
         contact_cfg: dict[str, Any] | None = None
         if friction_coefficient is None or solref is None or solimp is None:
             raw_contact = get_sensor_spec(sensor_name).get("contact")
@@ -122,33 +131,32 @@ def add_tactile_contact_pairs(
             _ROLLING_FRICTION,
         ]
 
-        for obj_idx, obj_geom in enumerate(object_geoms):
-            for geom_idx, sensor_geom in enumerate(sensor_geoms):
-                pair_key = frozenset((sensor_geom, obj_geom))
-                if pair_key in existing_pairs:
-                    continue
-                base_name = (
-                    f"{pair_prefix}_{side}_{geom_idx}"
-                    if len(object_geoms) == 1
-                    else f"{pair_prefix}_{side}_{obj_idx}_{geom_idx}"
-                )
-                pair_name = base_name
-                suffix = 1
-                while pair_name in existing_names:
-                    pair_name = f"{base_name}_{suffix}"
-                    suffix += 1
-                scene.add_pair(
-                    name=pair_name,
-                    geomname1=sensor_geom,
-                    geomname2=obj_geom,
-                    condim=condim,
-                    solref=pair_solref,
-                    solimp=pair_solimp,
-                    friction=pair_friction,
-                )
-                existing_pairs.add(pair_key)
-                existing_names.add(pair_name)
-                added_names.append(pair_name)
+        for obj_idx, geom_idx, sensor_geom, obj_geom in pending_pairs:
+            pair_key = frozenset((sensor_geom, obj_geom))
+            if pair_key in existing_pairs:
+                continue
+            base_name = (
+                f"{pair_prefix}_{side}_{geom_idx}"
+                if len(object_geoms) == 1
+                else f"{pair_prefix}_{side}_{obj_idx}_{geom_idx}"
+            )
+            pair_name = base_name
+            suffix = 1
+            while pair_name in existing_names:
+                pair_name = f"{base_name}_{suffix}"
+                suffix += 1
+            scene.add_pair(
+                name=pair_name,
+                geomname1=sensor_geom,
+                geomname2=obj_geom,
+                condim=condim,
+                solref=pair_solref,
+                solimp=pair_solimp,
+                friction=pair_friction,
+            )
+            existing_pairs.add(pair_key)
+            existing_names.add(pair_name)
+            added_names.append(pair_name)
     return added_names
 
 
@@ -309,10 +317,23 @@ def _pad_frame_in_geom(
     if gtype == int(_mj.mjtGeom.mjGEOM_BOX):
         half = np.asarray(model.geom_size[pad_gid], dtype=np.float64)
         centroid = site_pos_in_geom.mean(axis=0)
-        ratios = np.abs(centroid) / np.maximum(half, 1e-12)
-        if float(ratios.max()) > 1e-3:
-            axis = int(np.argmax(ratios))
-            face_sign = 1.0 if centroid[axis] >= 0.0 else -1.0
+        normals = site_rot_in_geom[:, :, 2]
+        mean_normal = normals.mean(axis=0)
+        axis_alignment = np.abs(normals).mean(axis=0)
+        axis = -1
+        face_sign = 1.0
+        if float(axis_alignment.max()) > 1e-6:
+            axis = int(np.argmax(axis_alignment))
+            if abs(float(centroid[axis])) > 1e-6 * max(float(half[axis]), 1e-12):
+                face_sign = 1.0 if centroid[axis] >= 0.0 else -1.0
+            elif abs(float(mean_normal[axis])) > 1e-6:
+                face_sign = -1.0 if mean_normal[axis] >= 0.0 else 1.0
+        else:
+            ratios = np.abs(centroid) / np.maximum(half, 1e-12)
+            if float(ratios.max()) > 1e-3:
+                axis = int(np.argmax(ratios))
+                face_sign = 1.0 if centroid[axis] >= 0.0 else -1.0
+        if axis >= 0:
             z_local = np.zeros(3, dtype=np.float64)
             z_local[axis] = -face_sign
             hint = np.zeros(3, dtype=np.float64)

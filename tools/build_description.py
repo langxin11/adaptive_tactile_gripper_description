@@ -26,7 +26,10 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from adaptive_tactile_gripper_description.appearance import Appearance, is_visual, read_appearance
-from adaptive_tactile_gripper_description.assembly import _add_module_contact_exclusions
+from adaptive_tactile_gripper_description.assembly import (
+    _add_module_contact_exclusions,
+    _add_opposing_tip_stop,
+)
 from adaptive_tactile_gripper_description.component_mass import (
     BASE_FASTENERS_MASS_KG,
     FINGER_FASTENERS_MASS_KG,
@@ -1691,6 +1694,19 @@ def _assemble_single_mjcf(
     _add_module_contact_exclusions(
         spec, left_sensor_path is not None, right_sensor_path is not None, camera_path is not None
     )
+    if left_sensor_path is not None and right_sensor_path is not None:
+        tip_protrusion = {
+            "pts_2_0": TIP_PROTRUSION_M,
+            "flat_pad": TIP_PROTRUSION_M,
+            "paxini_m2824": PAXINI_M2824_TIP_PROTRUSION_M,
+        }
+        contact_slide = (
+            FULL_OPEN_MOUNT_GAP_M
+            - tip_protrusion[left_sensor_path.stem]
+            - tip_protrusion[right_sensor_path.stem]
+        ) / 2.0
+        if contact_slide <= SINGLE_FINGER_STROKE_M:
+            _add_opposing_tip_stop(spec, contact_slide)
     spec.compile()
     root = ET.fromstring(spec.to_xml())
     base = root.find(".//body[@name='base']")

@@ -283,15 +283,6 @@
     </body>
   </worldbody>
   <contact>
-    <pair geom1="left_taxel_geom_00" geom2="right_taxel_geom_20" name="opposing_tip_0_6" friction="0.8 0.8 0.02 0.001 0.001" solref="0.002" solimp="0.99 0.999 0.0001" />
-    <pair geom1="left_taxel_geom_01" geom2="right_taxel_geom_21" name="opposing_tip_1_7" friction="0.8 0.8 0.02 0.001 0.001" solref="0.002" solimp="0.99 0.999 0.0001" />
-    <pair geom1="left_taxel_geom_02" geom2="right_taxel_geom_22" name="opposing_tip_2_8" friction="0.8 0.8 0.02 0.001 0.001" solref="0.002" solimp="0.99 0.999 0.0001" />
-    <pair geom1="left_taxel_geom_10" geom2="right_taxel_geom_10" name="opposing_tip_3_3" friction="0.8 0.8 0.02 0.001 0.001" solref="0.002" solimp="0.99 0.999 0.0001" />
-    <pair geom1="left_taxel_geom_11" geom2="right_taxel_geom_11" name="opposing_tip_4_4" friction="0.8 0.8 0.02 0.001 0.001" solref="0.002" solimp="0.99 0.999 0.0001" />
-    <pair geom1="left_taxel_geom_12" geom2="right_taxel_geom_12" name="opposing_tip_5_5" friction="0.8 0.8 0.02 0.001 0.001" solref="0.002" solimp="0.99 0.999 0.0001" />
-    <pair geom1="left_taxel_geom_20" geom2="right_taxel_geom_00" name="opposing_tip_6_0" friction="0.8 0.8 0.02 0.001 0.001" solref="0.002" solimp="0.99 0.999 0.0001" />
-    <pair geom1="left_taxel_geom_21" geom2="right_taxel_geom_01" name="opposing_tip_7_1" friction="0.8 0.8 0.02 0.001 0.001" solref="0.002" solimp="0.99 0.999 0.0001" />
-    <pair geom1="left_taxel_geom_22" geom2="right_taxel_geom_02" name="opposing_tip_8_2" friction="0.8 0.8 0.02 0.001 0.001" solref="0.002" solimp="0.99 0.999 0.0001" />
     <exclude body1="base" body2="left_finger" />
     <exclude body1="base" body2="right_finger" />
     <exclude body1="base" body2="left_sensor_body" />
@@ -300,6 +291,12 @@
     <exclude body1="right_finger" body2="right_sensor_body" />
     <exclude body1="base" body2="cam_camera_assembly" />
   </contact>
+  <tendon>
+    <fixed name="opposing_tip_stop" limited="true" range="-1 0.0668" solreflimit="0.002" solimplimit="0.99 0.999 0.0001" springlength="0">
+      <joint joint="left_finger_slide" coef="1" />
+      <joint joint="right_finger_slide" coef="1" />
+    </fixed>
+  </tendon>
   <equality>
     <connect body1="left_finger" body2="rod_bearing_shim_subassembly" anchor="-0.0176777 -0.0045 0.0137868" solref="0.002" solimp="0.99 0.999 0.0005" />
     <connect body1="left_finger" body2="rod_bearing_shim_subassembly" anchor="-0.0176777 0.0955 0.0137868" solref="0.002" solimp="0.99 0.999 0.0005" />

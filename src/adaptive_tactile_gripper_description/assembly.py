@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -236,47 +235,47 @@ def _add_module_contact_exclusions(
     right: bool,
     with_camera: bool,
 ) -> None:
-    """按挂载情况排除底盘装配界面处的内部接触，并为对置指尖添加防穿透接触对。"""
+    """按挂载情况排除底盘装配界面处的内部接触。"""
     for side, mounted in (("left", left), ("right", right)):
         if mounted:
             for adjacent in ("base", f"{side}_finger"):
                 spec.add_exclude(bodyname1=adjacent, bodyname2=f"{side}_sensor_body")
     if with_camera:
         spec.add_exclude(bodyname1="base", bodyname2="cam_camera_assembly")
-    if left and right:
-        # 对置指尖在空夹大扭矩下使用刚性接触对，防止球心或垫块中面互相穿透导致反转卡死，
-        # 同时保持各指尖对外部抓取物体的柔性接触参数不变。
-        left_tips = [
-            geom
-            for geom in spec.geoms
-            if geom.name.startswith("left_taxel_geom_") or geom.name == "left_pad_collision"
-        ]
-        right_tips = [
-            geom
-            for geom in spec.geoms
-            if geom.name.startswith("right_taxel_geom_") or geom.name == "right_pad_collision"
-        ]
-        for i, left_geom in enumerate(left_tips):
-            for j, right_geom in enumerate(right_tips):
-                if (
-                    left_geom.type == _mj.mjtGeom.mjGEOM_SPHERE
-                    and right_geom.type == _mj.mjtGeom.mjGEOM_SPHERE
-                ):
-                    d_xy = math.hypot(
-                        float(left_geom.pos[0]) - float(right_geom.pos[0]),
-                        float(left_geom.pos[1]) + float(right_geom.pos[1]),
-                    )
-                    if d_xy >= float(left_geom.size[0]) + float(right_geom.size[0]) + 1e-4:
-                        continue
-                spec.add_pair(
-                    name=f"opposing_tip_{i}_{j}",
-                    geomname1=left_geom.name,
-                    geomname2=right_geom.name,
-                    condim=3,
-                    solref=[0.002, 1.0],
-                    solimp=[0.99, 0.999, 0.0001, 0.5, 2.0],
-                    friction=[0.8, 0.8, 0.02, 0.001, 0.001],
-                )
+
+
+def _contact_slide_if_configured(
+    data_root: Path, left_sensor: str | None, right_sensor: str | None
+) -> float | None:
+    if left_sensor in (None, "none") or right_sensor in (None, "none"):
+        return None
+    for name in (left_sensor, right_sensor):
+        yaml_path = data_root / "config" / "sensors" / f"{name}.yaml"
+        if not yaml_path.is_file():
+            return None
+        spec = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+        thickness = spec.get("thickness_to_tip_m") if isinstance(spec, dict) else None
+        if isinstance(thickness, bool) or not isinstance(thickness, (int, float)):
+            return None
+    return get_stroke_limits(left_sensor, right_sensor)["first_contact_single_finger_closure_m"]
+
+
+def _add_opposing_tip_stop(spec: MjSpec, contact_slide_m: float | None) -> None:
+    """当两侧传感器在行程内可相遇时，添加单调限位肌腱防止大扭矩/大步长下对置指尖越心反转。"""
+    if contact_slide_m is None:
+        return
+    # 允许双侧指尖在首次接触后合计压缩 0.5 mm（单侧 0.25 mm）以保留真实对置接触力，
+    # 同时用单调线性肌腱上限替代刚性接触对，防止大扭矩/大步长下单步跨过垫块中面后法向反转卡死。
+    max_closure = min(2.0 * float(contact_slide_m) + 5e-4, 2.0 * SINGLE_FINGER_STROKE_M)
+    stop = spec.add_tendon(
+        name="opposing_tip_stop",
+        limited=True,
+        range=[-1.0, max_closure],
+        solref_limit=[0.002, 1.0],
+        solimp_limit=[0.99, 0.999, 0.0001, 0.5, 2.0],
+    )
+    stop.wrap_joint("left_finger_slide", 1.0)
+    stop.wrap_joint("right_finger_slide", 1.0)
 
 
 def build_gripper_spec(
@@ -342,4 +341,5 @@ def build_gripper_spec(
         right_sensor not in (None, "none"),
         with_camera,
     )
+    _add_opposing_tip_stop(spec, _contact_slide_if_configured(data_root, left_sensor, right_sensor))
     return spec

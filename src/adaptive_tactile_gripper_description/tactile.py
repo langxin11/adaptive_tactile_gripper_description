@@ -140,6 +140,8 @@ class _RigidPadCache:
     quat_snapshot: np.ndarray
     geom_pos_snapshot: np.ndarray
     geom_quat_snapshot: np.ndarray
+    geom_size_snapshot: np.ndarray
+    geom_type_snapshot: int
     pad_rot_in_geom: np.ndarray
     face_origin_in_geom: np.ndarray
     local_pos: np.ndarray
@@ -311,6 +313,8 @@ def _build_rigid_pad_cache(
     quats = np.asarray(model.site_quat[site_ids], dtype=np.float64).copy()
     geom_pos = np.asarray(model.geom_pos[pad_gid], dtype=np.float64).copy()
     geom_quat = np.asarray(model.geom_quat[pad_gid], dtype=np.float64).copy()
+    geom_size = np.asarray(model.geom_size[pad_gid], dtype=np.float64).copy()
+    geom_type = int(model.geom_type[pad_gid])
     geom_rot = _quat_wxyz_to_mat(geom_quat)
     rot_body = np.stack([_quat_wxyz_to_mat(q) for q in quats], axis=0)
     site_pos_in_geom = (pos_body - geom_pos) @ geom_rot
@@ -327,6 +331,8 @@ def _build_rigid_pad_cache(
         quat_snapshot=quats,
         geom_pos_snapshot=geom_pos,
         geom_quat_snapshot=geom_quat,
+        geom_size_snapshot=geom_size,
+        geom_type_snapshot=geom_type,
         pad_rot_in_geom=pad_rot_in_geom,
         face_origin_in_geom=face_origin_in_geom,
         local_pos=local_pos,
@@ -705,22 +711,22 @@ class TactileForceReader:
             assert spec is not None
             pad_gid = spec.pad_geom_id
             assert pad_gid is not None
-            box_half_z = (
-                float(self._model.geom_size[pad_gid, 2])
-                if int(self._model.geom_type[pad_gid]) == int(_mj.mjtGeom.mjGEOM_BOX)
-                else None
-            )
+            is_box_pad = int(self._model.geom_type[pad_gid]) == int(_mj.mjtGeom.mjGEOM_BOX)
             rigid = self._rigid_pads[side]
             if rigid is not None:
                 cur_pos = np.asarray(self._model.site_pos[spec.site_ids], dtype=np.float64)
                 cur_quat = np.asarray(self._model.site_quat[spec.site_ids], dtype=np.float64)
                 cur_gpos = np.asarray(self._model.geom_pos[pad_gid], dtype=np.float64)
                 cur_gquat = np.asarray(self._model.geom_quat[pad_gid], dtype=np.float64)
+                cur_gsize = np.asarray(self._model.geom_size[pad_gid], dtype=np.float64)
+                cur_gtype = int(self._model.geom_type[pad_gid])
                 if not (
                     np.array_equal(cur_pos, rigid.pos_snapshot)
                     and np.array_equal(cur_quat, rigid.quat_snapshot)
                     and np.array_equal(cur_gpos, rigid.geom_pos_snapshot)
                     and np.array_equal(cur_gquat, rigid.geom_quat_snapshot)
+                    and np.array_equal(cur_gsize, rigid.geom_size_snapshot)
+                    and cur_gtype == rigid.geom_type_snapshot
                 ):
                     rigid = _build_rigid_pad_cache(self._model, pad_gid, spec.site_ids)
                     self._rigid_pads[side] = rigid
@@ -738,10 +744,7 @@ class TactileForceReader:
                     if float(normal_into_pad @ normal) <= _FRONT_FACE_NORMAL_MIN_DOT:
                         continue
                     pos_on_pad = pos + 0.5 * con_dist * normal_into_pad
-                    if (
-                        box_half_z is not None
-                        and float((pos_on_pad - origin) @ normal) > box_half_z
-                    ):
+                    if is_box_pad and float((pos_on_pad - geom_pos_w) @ normal) > 0.0:
                         continue
                     pos_local = (pos - origin) @ pad_rot
                     delta = local_pos - pos_local
@@ -791,7 +794,7 @@ class TactileForceReader:
                 if float(normal_into_pad @ normal) <= _FRONT_FACE_NORMAL_MIN_DOT:
                     continue
                 pos_on_pad = pos + 0.5 * con_dist * normal_into_pad
-                if box_half_z is not None and float((pos_on_pad - origin) @ normal) > box_half_z:
+                if is_box_pad and float((pos_on_pad - geom_pos_w) @ normal) > 0.0:
                     continue
                 pos_local = (pos - origin) @ pad_rot
                 delta = site_pos - pos

@@ -933,3 +933,66 @@ def test_paxini_deep_front_penetration_keeps_reading_load():
     )
     assert expected_local[2] > 1.0
     np.testing.assert_allclose(forces.sum(axis=0), expected_local, atol=1e-11)
+
+
+def test_rigid_pad_refreshes_cache_when_geom_size_changes():
+    """验证原地修改 pad_collision 的 geom_size 后，既有 reader 自动刷新缓存并与新建 reader 一致。"""
+    scene = mujoco.MjSpec()
+    scene.option.gravity = [0.0, 0.0, 0.0]
+    scene.attach(
+        build_gripper_spec(
+            left_sensor="paxini_m2824", right_sensor=None, with_camera=False, fixed_base=True
+        ),
+        prefix="gripper/",
+        frame=scene.worldbody.add_frame(),
+    )
+    ref_model = scene.compile()
+    ref_data = mujoco.MjData(ref_model)
+    mujoco.mj_forward(ref_model, ref_data)
+    pad_gid_ref = ref_model.geom("gripper/left_pad_collision").id
+    pad_pos = ref_data.geom_xpos[pad_gid_ref].copy()
+    pad_rot = ref_data.geom_xmat[pad_gid_ref].reshape(3, 3)
+    # 探针球放在新减薄（half_z=1.0 mm）后前表面外侧 1.8 mm（r=2.0 mm），使减薄后产生 0.2 mm 轻压。
+    probe_pos = pad_pos + pad_rot @ np.array([0.0, 0.0, 0.001 + 0.0018])
+    probe = scene.worldbody.add_body(name="resize_probe", pos=probe_pos.tolist())
+    probe.add_geom(
+        name="resize_probe_geom",
+        type=mujoco.mjtGeom.mjGEOM_SPHERE,
+        size=[0.002, 0.0, 0.0],
+        contype=0,
+        conaffinity=2,
+    )
+    add_tactile_contact_pairs(
+        scene,
+        "resize_probe_geom",
+        left_sensor="paxini_m2824",
+        right_sensor=None,
+        prefix="gripper/",
+    )
+    model = scene.compile()
+    data = mujoco.MjData(model)
+    reused = TactileForceReader(
+        model,
+        left_sensor="paxini_m2824",
+        right_sensor=None,
+        prefix="gripper/",
+        target_geoms="resize_probe_geom",
+    )
+
+    # 原地减薄 pad_collision 厚度至 1.0 mm 半厚并刷新前向计算。
+    pad_gid = model.geom("gripper/left_pad_collision").id
+    model.geom_size[pad_gid, 2] = 0.001
+    mujoco.mj_forward(model, data)
+
+    fresh = TactileForceReader(
+        model,
+        left_sensor="paxini_m2824",
+        right_sensor=None,
+        prefix="gripper/",
+        target_geoms="resize_probe_geom",
+    )
+    reused_forces = reused.read(data)["left"]
+    fresh_forces = fresh.read(data)["left"]
+    assert reused_forces is not None and fresh_forces is not None
+    assert fresh_forces[:, 2].sum() > 0.05
+    np.testing.assert_allclose(reused_forces, fresh_forces, atol=1e-12)

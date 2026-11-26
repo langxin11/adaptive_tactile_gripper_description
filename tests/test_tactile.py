@@ -283,6 +283,7 @@ def test_add_tactile_contact_pairs_deduplicated_and_idempotent():
         mujoco.mj_step(m_before, d_before)
     assert not any(before_cube_gid in (con.geom1, con.geom2) for con in d_before.contact)
 
+    initial_pairs = len(scene.pairs)
     added = add_tactile_contact_pairs(
         scene,
         "cube/target_cube_geom",
@@ -291,7 +292,7 @@ def test_add_tactile_contact_pairs_deduplicated_and_idempotent():
         prefix="gripper/",
     )
     assert len(added) == 10
-    assert len(scene.pairs) == 10
+    assert len(scene.pairs) == initial_pairs + 10
     assert sum(name.startswith("tactile_object_left_") for name in added) == 9
     assert [name for name in added if name.startswith("tactile_object_right_")] == [
         "tactile_object_right_0"

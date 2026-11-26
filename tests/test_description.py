@@ -279,3 +279,80 @@ def test_paxini_m2824_pad_normal_force_positive_on_compression():
     assert contact_forces["left"] and contact_forces["right"]
     assert sum(contact_forces["left"]) > 0.1
     assert sum(contact_forces["right"]) > 0.1
+
+
+@pytest.mark.parametrize(
+    ("left_sensor", "right_sensor"),
+    [
+        ("pts_2_0", "pts_2_0"),
+        ("pts_2_0", "flat_pad"),
+        ("flat_pad", "flat_pad"),
+        ("pts_2_0", "paxini_m2824"),
+        ("paxini_m2824", "paxini_m2824"),
+    ],
+)
+def test_empty_grasp_does_not_jam_and_reopens(left_sensor, right_sensor):
+    """验证空夹大扭矩闭合后对置指尖不反转穿模卡死，反向力矩可顺利重新张开。"""
+    model = build_gripper_spec(
+        left_sensor=left_sensor,
+        right_sensor=right_sensor,
+        with_camera=False,
+        fixed_base=True,
+    ).compile()
+    for close_torque in (0.3, 4.0):
+        data = mujoco.MjData(model)
+        data.ctrl[0] = close_torque
+        for _ in range(1000):
+            mujoco.mj_step(model, data)
+        assert data.ncon >= 1
+        data.ctrl[0] = -4.0
+        for _ in range(1000):
+            mujoco.mj_step(model, data)
+        q_eff = float(data.joint("gripper_drive").qpos[0] + data.joint("gripper_backlash").qpos[0])
+        assert q_eff < 0.02
+
+
+def test_unloaded_chassis_overshoot_stays_clear_of_opposing_slider():
+    """验证空载底盘在 1 N·m 与满量程 4 N·m 急闭步进仿真中，曲柄轴套与对侧滑块保持正间隙。"""
+    model = build_gripper_spec(
+        left_sensor=None,
+        right_sensor=None,
+        with_camera=False,
+        fixed_base=True,
+    ).compile()
+    opposing_pairs = []
+    for rod_name, opp_finger_name in (
+        ("rod_bearing_shim_subassembly", "right_finger"),
+        ("rod_bearing_shim_subassembly_2", "left_finger"),
+    ):
+        rod_bid = model.body(rod_name).id
+        opp_bid = model.body(opp_finger_name).id
+        spacers = [
+            gid
+            for gid in range(model.ngeom)
+            if model.geom_bodyid[gid] == rod_bid
+            and model.geom_type[gid] == mujoco.mjtGeom.mjGEOM_MESH
+            and model.mesh(model.geom_dataid[gid]).name == "link_spacer"
+        ]
+        blocks = [
+            gid
+            for gid in range(model.ngeom)
+            if model.geom_bodyid[gid] == opp_bid
+            and model.geom_type[gid] == mujoco.mjtGeom.mjGEOM_MESH
+            and model.mesh(model.geom_dataid[gid]).name == "mgn9_block"
+        ]
+        assert len(spacers) == 2 and len(blocks) == 1
+        for s_gid in spacers:
+            opposing_pairs.append((s_gid, blocks[0]))
+
+    fromto = np.empty(6, dtype=float)
+    for torque in (1.0, 4.0):
+        data = mujoco.MjData(model)
+        data.ctrl[0] = torque
+        min_clearance = float("inf")
+        for _ in range(400):
+            mujoco.mj_step(model, data)
+            for s_gid, b_gid in opposing_pairs:
+                dist = float(mujoco.mj_geomDistance(model, data, s_gid, b_gid, 1.0, fromto))
+                min_clearance = min(min_clearance, dist)
+        assert min_clearance > 0.0, (torque, min_clearance)

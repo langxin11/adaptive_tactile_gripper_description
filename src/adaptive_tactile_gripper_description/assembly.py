@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -235,13 +236,47 @@ def _add_module_contact_exclusions(
     right: bool,
     with_camera: bool,
 ) -> None:
-    """按挂载情况排除底盘装配界面处的内部接触。"""
+    """按挂载情况排除底盘装配界面处的内部接触，并为对置指尖添加防穿透接触对。"""
     for side, mounted in (("left", left), ("right", right)):
         if mounted:
             for adjacent in ("base", f"{side}_finger"):
                 spec.add_exclude(bodyname1=adjacent, bodyname2=f"{side}_sensor_body")
     if with_camera:
         spec.add_exclude(bodyname1="base", bodyname2="cam_camera_assembly")
+    if left and right:
+        # 对置指尖在空夹大扭矩下使用刚性接触对，防止球心或垫块中面互相穿透导致反转卡死，
+        # 同时保持各指尖对外部抓取物体的柔性接触参数不变。
+        left_tips = [
+            geom
+            for geom in spec.geoms
+            if geom.name.startswith("left_taxel_geom_") or geom.name == "left_pad_collision"
+        ]
+        right_tips = [
+            geom
+            for geom in spec.geoms
+            if geom.name.startswith("right_taxel_geom_") or geom.name == "right_pad_collision"
+        ]
+        for i, left_geom in enumerate(left_tips):
+            for j, right_geom in enumerate(right_tips):
+                if (
+                    left_geom.type == _mj.mjtGeom.mjGEOM_SPHERE
+                    and right_geom.type == _mj.mjtGeom.mjGEOM_SPHERE
+                ):
+                    d_xy = math.hypot(
+                        float(left_geom.pos[0]) - float(right_geom.pos[0]),
+                        float(left_geom.pos[1]) + float(right_geom.pos[1]),
+                    )
+                    if d_xy >= float(left_geom.size[0]) + float(right_geom.size[0]) + 1e-4:
+                        continue
+                spec.add_pair(
+                    name=f"opposing_tip_{i}_{j}",
+                    geomname1=left_geom.name,
+                    geomname2=right_geom.name,
+                    condim=3,
+                    solref=[0.002, 1.0],
+                    solimp=[0.99, 0.999, 0.0001, 0.5, 2.0],
+                    friction=[0.8, 0.8, 0.02, 0.001, 0.001],
+                )
 
 
 def build_gripper_spec(

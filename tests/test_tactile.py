@@ -618,3 +618,53 @@ def test_rigid_pad_reuses_cached_hull_across_reads(monkeypatch):
         )
         assert ncon >= 1 and expected[2] > 1.0
         np.testing.assert_allclose(arr.sum(axis=0), expected, atol=1e-11)
+
+
+def test_rigid_pad_refreshes_cache_when_site_transforms_change():
+    """验证标定修改 model.site_pos / model.site_quat 后，read() 自动刷新缓存并保持合力与符号一致。"""
+    scene = _attach_gripper_and_box(left_sensor="paxini_m2824", right_sensor="paxini_m2824")
+    add_tactile_contact_pairs(
+        scene,
+        "cube/target_cube_geom",
+        left_sensor="paxini_m2824",
+        right_sensor="paxini_m2824",
+        prefix="gripper/",
+    )
+    model = scene.compile()
+    data = mujoco.MjData(model)
+    reader = TactileForceReader(
+        model,
+        left_sensor="paxini_m2824",
+        right_sensor="paxini_m2824",
+        prefix="gripper/",
+    )
+    data.ctrl[0] = 0.25
+    for _ in range(400):
+        mujoco.mj_step(model, data)
+
+    before = reader.read(data)["left"]
+    assert before is not None
+    peak_idx = int(np.argmax(before[:, 2]))
+    assert before[peak_idx, 2] > 1e-3
+
+    # 将受压峰值测点的局部坐标系翻转 180° 并微调位置，再刷新前向运动学。
+    peak_sid = reader.site_ids("left")[peak_idx]
+    model.site_quat[peak_sid] = [1.0, 0.0, 0.0, 0.0]
+    model.site_pos[peak_sid, 0] += 0.0005
+    mujoco.mj_forward(model, data)
+
+    after = reader.read(data)["left"]
+    assert after is not None
+    # 翻转该测点法向后，其局部 Fz 符号须反转为负，且将全部测点还原到世界系后总力仍与 MuJoCo 严格一致。
+    assert after[peak_idx, 2] < -1e-3
+    sids = np.array(reader.site_ids("left"), dtype=np.intp)
+    world_sum = np.einsum(
+        "nij,nj->ni", np.asarray(data.site_xmat[sids]).reshape(-1, 3, 3), after
+    ).sum(axis=0)
+    pad_rot = np.asarray(
+        data.site_xmat[model.site("gripper/left_taxel_001").id], dtype=np.float64
+    ).reshape(3, 3)
+    expected_local, _ = _raw_pad_net_force_local(
+        model, data, "gripper/left_pad_collision", "gripper/left_taxel_001"
+    )
+    np.testing.assert_allclose(pad_rot.T @ world_sum, expected_local, atol=1e-11)

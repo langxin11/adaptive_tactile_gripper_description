@@ -242,6 +242,54 @@ def test_build_validates_paxini_meshes_before_mutating_output(tmp_path, descript
     assert marker_cfg.read_text(encoding="utf-8") == "# sentinel\n"
     assert marker_stl.read_bytes() == b"sentinel-stl"
 
+    # 仅有共面薄片（4 顶点、2 三角形，体积为零）的传感器 STL 在 MuJoCo 中无法编译，也须在修改输出前失败。
+    import struct
+
+    shutil.copy2(
+        root / "tools/paxini_export/paxini_m2824_adapter.stl",
+        bad_dir / "paxini_m2824_adapter.stl",
+    )
+    flat_quad = (
+        struct.pack("<80sI", b"flat", 2)
+        + struct.pack(
+            "<12fH",
+            0.0,
+            0.0,
+            1.0,
+            -0.005,
+            -0.005,
+            0.0037,
+            0.005,
+            -0.005,
+            0.0037,
+            0.005,
+            0.005,
+            0.0037,
+            0,
+        )
+        + struct.pack(
+            "<12fH",
+            0.0,
+            0.0,
+            1.0,
+            -0.005,
+            -0.005,
+            0.0037,
+            0.005,
+            0.005,
+            0.0037,
+            -0.005,
+            0.005,
+            0.0037,
+            0,
+        )
+    )
+    (bad_dir / "paxini_m2824.stl").write_bytes(flat_quad)
+    with pytest.raises(ValueError, match="paxini_m2824"):
+        description_builder["build_all"](export_dir, out_root, paxini_export_dir=bad_dir)
+    assert marker_cfg.read_text(encoding="utf-8") == "# sentinel\n"
+    assert marker_stl.read_bytes() == b"sentinel-stl"
+
 
 def test_build_preserves_explicit_smooth_meshes(tmp_path, description_builder):
     """已有外观配置显式设置 smooth_meshes 时保留用户列表，缺失该键时回退到默认列表。"""

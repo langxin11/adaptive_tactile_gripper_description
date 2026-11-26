@@ -456,7 +456,7 @@ def _load_paxini_taxels(path: Path) -> list[dict[str, object]]:
 
 
 def _validate_paxini_meshes(paxini_export_dir: Path) -> None:
-    """在修改输出目录前核对 PaXini 源 STL 的存在性、封闭惯量与碰撞包络。"""
+    """在修改输出目录前核对 PaXini 源 STL 的存在性、封闭惯量、碰撞包络与 MuJoCo 编译有效性。"""
     sensor_stl = paxini_export_dir / "paxini_m2824.stl"
     adapter_stl = paxini_export_dir / "paxini_m2824_adapter.stl"
     for src in (sensor_stl, adapter_stl):
@@ -474,6 +474,29 @@ def _validate_paxini_meshes(paxini_export_dir: Path) -> None:
         )
         if not bool(covered.all()):
             raise ValueError(f"{src.name} 存在超出碰撞盒包络的顶点")
+
+    probe_root = ET.Element("mujoco")
+    ET.SubElement(probe_root, "compiler", {"meshdir": str(paxini_export_dir.resolve())})
+    asset = ET.SubElement(probe_root, "asset")
+    worldbody = ET.SubElement(probe_root, "worldbody")
+    body = ET.SubElement(worldbody, "body", {"name": "sensor_body"})
+    for mesh_name, fname in (
+        ("paxini_m2824", "paxini_m2824.stl"),
+        ("paxini_m2824_adapter", "paxini_m2824_adapter.stl"),
+    ):
+        ET.SubElement(asset, "mesh", {"name": mesh_name, "file": fname})
+        ET.SubElement(
+            body,
+            "geom",
+            {
+                "type": "mesh",
+                "mesh": mesh_name,
+                "contype": "0",
+                "conaffinity": "0",
+                "group": "2",
+            },
+        )
+    mujoco.MjSpec.from_string(ET.tostring(probe_root, encoding="unicode")).compile()
 
 
 def _copy_paxini_meshes(paxini_export_dir: Path, out_meshes_dir: Path) -> None:

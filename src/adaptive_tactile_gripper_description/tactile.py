@@ -132,6 +132,8 @@ class _HullGeometry:
 
 @dataclass(frozen=True, slots=True)
 class _RigidPadCache:
+    pos_snapshot: np.ndarray
+    quat_snapshot: np.ndarray
     local_pos: np.ndarray
     xy: np.ndarray
     hull: _HullGeometry
@@ -146,7 +148,6 @@ class _SideSpec:
     grid_indices: np.ndarray | None
     geom_to_index: dict[int, int]
     pad_geom_id: int | None
-    rigid_pad: _RigidPadCache | None = None
 
 
 def _grid_indices(layout: dict[str, Any]) -> np.ndarray:
@@ -221,8 +222,8 @@ def _build_rigid_pad_cache(model: MjModel, site_ids: np.ndarray) -> _RigidPadCac
     body_ids = np.asarray(model.site_bodyid[site_ids], dtype=np.intp)
     if not bool(np.all(body_ids == body_ids[0])):
         return None
-    pos_body = np.asarray(model.site_pos[site_ids], dtype=np.float64)
-    quats = np.asarray(model.site_quat[site_ids], dtype=np.float64)
+    pos_body = np.asarray(model.site_pos[site_ids], dtype=np.float64).copy()
+    quats = np.asarray(model.site_quat[site_ids], dtype=np.float64).copy()
     rot_body = np.stack([_quat_wxyz_to_mat(q) for q in quats], axis=0)
     pad_rot_body = rot_body[0]
     local_pos = (pos_body - pos_body[0]) @ pad_rot_body
@@ -230,6 +231,8 @@ def _build_rigid_pad_cache(model: MjModel, site_ids: np.ndarray) -> _RigidPadCac
     rel_rot = np.einsum("ij,njk->nik", pad_rot_body.T, rot_body)
     same_orientation = bool(np.allclose(rel_rot, np.eye(3, dtype=np.float64), atol=1e-12))
     return _RigidPadCache(
+        pos_snapshot=pos_body,
+        quat_snapshot=quats,
         local_pos=local_pos,
         xy=xy,
         hull=_build_hull_geometry(xy),
@@ -322,6 +325,7 @@ class TactileForceReader:
         )
 
         self._sides: dict[str, _SideSpec | None] = {}
+        self._rigid_pads: dict[str, _RigidPadCache | None] = {"left": None, "right": None}
         self._geom_owners: dict[int, list[str]] = {}
         for side in ("left", "right"):
             side_layout = self._layout[side]
@@ -361,8 +365,8 @@ class TactileForceReader:
                     grid_indices=None,
                     geom_to_index={},
                     pad_geom_id=pad_gid,
-                    rigid_pad=_build_rigid_pad_cache(model, site_ids),
                 )
+                self._rigid_pads[side] = _build_rigid_pad_cache(model, site_ids)
             else:
                 raise ValueError(f"未知触觉布局模式 {mode!r}")
 
@@ -465,7 +469,16 @@ class TactileForceReader:
                 continue
             spec = self._sides[side]
             assert spec is not None
-            rigid = spec.rigid_pad
+            rigid = self._rigid_pads[side]
+            if rigid is not None:
+                cur_pos = np.asarray(self._model.site_pos[spec.site_ids], dtype=np.float64)
+                cur_quat = np.asarray(self._model.site_quat[spec.site_ids], dtype=np.float64)
+                if not (
+                    np.array_equal(cur_pos, rigid.pos_snapshot)
+                    and np.array_equal(cur_quat, rigid.quat_snapshot)
+                ):
+                    rigid = _build_rigid_pad_cache(self._model, spec.site_ids)
+                    self._rigid_pads[side] = rigid
             if rigid is not None:
                 sid0 = int(spec.site_ids[0])
                 origin = np.asarray(data.site_xpos[sid0], dtype=np.float64)

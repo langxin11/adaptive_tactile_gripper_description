@@ -251,7 +251,7 @@
     <exclude body1="right_finger" body2="right_sensor_body" />
   </contact>
   <tendon>
-    <fixed name="opposing_tip_stop" limited="true" range="-1 0.0668" solreflimit="0.002" solimplimit="0.99 0.999 0.0001" springlength="0">
+    <fixed name="opposing_tip_stop" limited="true" range="-1 0.0693" solreflimit="0.002" solimplimit="0.99 0.999 0.0001" springlength="0">
       <joint joint="left_finger_slide" coef="1" />
       <joint joint="right_finger_slide" coef="1" />
     </fixed>

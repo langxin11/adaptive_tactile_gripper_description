@@ -496,7 +496,7 @@ def test_attached_gripper_reopens_cleanly_at_non_default_timestep(
                 data.joint("gripper/left_finger_slide").qpos[0]
                 + data.joint("gripper/right_finger_slide").qpos[0]
             )
-            assert total_slide <= 2.0 * contact_slide + 0.0025
+            assert total_slide <= 2.0 * contact_slide + 0.0045
         data.ctrl[0] = -4.0
         for _ in range(steps_per_phase):
             mujoco.mj_step(model, data)

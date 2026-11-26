@@ -269,9 +269,9 @@ def _add_opposing_tip_stop(spec: MjSpec, contact_slide_m: float | None) -> None:
     """当两侧传感器在行程内可相遇时，添加单调限位肌腱防止大扭矩/大步长下对置指尖越心反转。"""
     if contact_slide_m is None:
         return
-    # 允许双侧指尖在首次接触后合计压缩 0.5 mm（单侧 0.25 mm）以保留真实对置接触力，
-    # 同时用单调线性肌腱上限替代刚性接触对，防止大扭矩/大步长下单步跨过垫块中面后法向反转卡死。
-    max_closure = min(2.0 * float(contact_slide_m) + 5e-4, 2.0 * SINGLE_FINGER_STROKE_M)
+    # 允许双侧指尖在首次接触后合计留出 3.0 mm（单侧 1.5 mm）压入行程，既确保 1–3 mm 薄物体
+    # 满扭矩抓取不被肌腱分流夹持力，又严格早于 5.6–6.0 mm 球心/垫块中面越界点，避免法向反转卡死。
+    max_closure = min(2.0 * float(contact_slide_m) + 3e-3, 2.0 * SINGLE_FINGER_STROKE_M)
     stop = spec.add_tendon(
         name="opposing_tip_stop",
         limited=True,

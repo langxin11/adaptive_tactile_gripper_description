@@ -1324,3 +1324,57 @@ def test_paxini_rejects_disabled_nativeccd_instead_of_dropping_load():
     mujoco.mj_forward(ok_model, ok_data)
     with pytest.raises(ValueError, match="nativeccd"):
         reader.read(ok_data)
+
+
+@pytest.mark.parametrize(
+    ("left_sensor", "right_sensor", "thickness_m"),
+    [
+        ("pts_2_0", "pts_2_0", 0.003),
+        ("paxini_m2824", "paxini_m2824", 0.002),
+    ],
+)
+def test_opposing_tip_stop_does_not_divert_thin_object_grip_force(
+    left_sensor, right_sensor, thickness_m
+):
+    """验证薄板满扭矩抓取时 opposing_tip_stop 不分流有效夹持力，与无止档肌腱结果一致。"""
+
+    def _steady_normal_force(*, keep_stop: bool) -> float:
+        spec = build_gripper_spec(
+            left_sensor=left_sensor,
+            right_sensor=right_sensor,
+            with_camera=False,
+            fixed_base=True,
+        )
+        if not keep_stop:
+            spec.delete(spec.tendon("opposing_tip_stop"))
+        spec.option.gravity = [0.0, 0.0, 0.0]
+        spec.worldbody.add_geom(
+            name="thin_plate",
+            type=mujoco.mjtGeom.mjGEOM_BOX,
+            pos=[0.0, 0.0, 0.14555],
+            size=[thickness_m / 2.0, 0.012, 0.012],
+        )
+        if "paxini_m2824" in (left_sensor, right_sensor):
+            add_tactile_contact_pairs(
+                spec, "thin_plate", left_sensor=left_sensor, right_sensor=right_sensor
+            )
+        model = spec.compile()
+        reader = TactileForceReader(
+            model,
+            left_sensor=left_sensor,
+            right_sensor=right_sensor,
+            target_geoms="thin_plate",
+        )
+        data = mujoco.MjData(model)
+        for torque in np.linspace(0.0, 4.0, 2001):
+            data.ctrl[0] = float(torque)
+            mujoco.mj_step(model, data)
+        mujoco.mj_step(model, data, nstep=500)
+        left_f = reader.read(data)["left"]
+        assert left_f is not None
+        return float(left_f[:, 2].sum())
+
+    with_stop = _steady_normal_force(keep_stop=True)
+    without_stop = _steady_normal_force(keep_stop=False)
+    assert with_stop > 50.0
+    assert with_stop == pytest.approx(without_stop, rel=1e-4, abs=1e-2)

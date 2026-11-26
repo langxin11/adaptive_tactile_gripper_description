@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import get_type_hints
 
 import mujoco
@@ -12,6 +13,7 @@ from adaptive_tactile_gripper_description import (
     TactileForceReader,
     add_tactile_contact_pairs,
     build_gripper_spec,
+    tactile,
 )
 
 
@@ -86,6 +88,186 @@ def test_tactile_type_annotations():
     assert get_type_hints(add_tactile_contact_pairs)["scene"] is mujoco.MjSpec
     assert get_type_hints(TactileForceReader.__init__)["model"] is mujoco.MjModel
     assert get_type_hints(TactileForceReader.read)["data"] is mujoco.MjData
+    assert get_type_hints(TactileForceReader.__init__)["target_geoms"] == (
+        str | int | Sequence[str | int] | None
+    )
+
+
+def _probe_pad(monkeypatch, xy, condim, *, pad_on_geom2=False):
+    points = [(-0.004, -0.003), (0.004, 0.003), (0.0, 0.0), (0.004, -0.003), (-0.004, 0.003)]
+    taxels = [{"id": i, "site_name": f"taxel_{i}"} for i in range(len(points))]
+    # The probe overlaps the plane by 0.2 mm. All sites share the pad normal.
+    quat = "1 0 0 0" if pad_on_geom2 else "0 1 0 0"
+    sites = "".join(
+        f'<site name="taxel_{i}" pos="{x} {y} 0" quat="{quat}"/>' for i, (x, y) in enumerate(points)
+    )
+    plane_name, sphere_name = ("probe_geom", "pad") if pad_on_geom2 else ("pad", "probe_geom")
+    model = mujoco.MjModel.from_xml_string(f"""
+      <mujoco>
+        <option gravity="0 0 0" cone="elliptic"/>
+        <worldbody>
+          <geom name="{plane_name}" type="plane" size=".03 .03 .001"
+                condim="{condim}" friction=".8 .02 .01"/>
+          {"" if pad_on_geom2 else sites}
+          <body pos="{xy[0]} {xy[1]} .0018">
+            <freejoint/>
+            <geom name="{sphere_name}" type="sphere" size=".002" mass=".05"/>
+            {sites if pad_on_geom2 else ""}
+          </body>
+        </worldbody>
+      </mujoco>
+    """)
+    monkeypatch.setattr(
+        tactile,
+        "get_tactile_layout",
+        lambda *args, **kwargs: {
+            "left": {"mode": "pad_sites", "pad_geom_name": "pad", "taxels": taxels},
+            "right": None,
+        },
+    )
+    return model, mujoco.MjData(model)
+
+
+@pytest.mark.parametrize(("condim", "pad_on_geom2"), [(4, False), (4, True), (6, False)])
+def test_pad_reconstructs_contact_twist_without_changing_net_force(
+    monkeypatch, condim, pad_on_geom2
+):
+    model, data = _probe_pad(monkeypatch, (0.0013, -0.0007), condim, pad_on_geom2=pad_on_geom2)
+    spin = np.array([2.0, 1.0, 5.0])
+    # Cancel the sliding velocity of the spinning probe at the contact.
+    data.qvel[:3] = -np.cross(spin, [0.0, 0.0, -0.0019])
+    data.qvel[3:] = spin
+    mujoco.mj_forward(model, data)
+    assert data.ncon == 1
+    contact = data.contact[0]
+    assert contact.dim == condim
+    assert contact.geom[int(pad_on_geom2)] == model.geom("pad").id
+    sign = 1 if pad_on_geom2 else -1
+    wrench = np.zeros(6)
+    mujoco.mj_contactForce(model, data, 0, wrench)
+    assert abs(wrench[3]) > 1e-6
+    if condim == 6:
+        assert np.linalg.norm(wrench[4:]) > 1e-6
+    contact_frame = contact.frame.reshape(3, 3)
+    raw_force = sign * contact_frame.T @ wrench[:3]
+    raw_twist = sign * contact_frame[0] * wrench[3]
+
+    reader = TactileForceReader(model, right_sensor=None, target_geoms="probe_geom")
+    forces = reader.read(data)["left"]
+    assert forces is not None
+    assert np.all(forces[:, 2] >= 0.0)
+    positions = data.site_xpos[list(reader.site_ids("left"))]
+    rotation = data.site_xmat[reader.site_ids("left")[0]].reshape(3, 3)
+    world_forces = forces @ rotation.T
+    np.testing.assert_allclose(world_forces.sum(axis=0), raw_force, atol=1e-12)
+    # A matching centroid gives the distributed contact force zero moment
+    # about the projected contact, even when rolling induces shear.
+    origin = np.array([*contact.pos[:2], positions[0, 2]])
+    moment = np.cross(positions - origin, world_forces).sum(axis=0)
+    np.testing.assert_allclose(moment, raw_twist, atol=1e-12)
+
+    narrow_reader = TactileForceReader(model, right_sensor=None, pad_sigma_m=1e-200)
+    narrow_forces = narrow_reader.read(data)["left"]
+    assert narrow_forces is not None
+    narrow_world = narrow_forces @ rotation.T
+    np.testing.assert_allclose(narrow_world.sum(axis=0), raw_force, atol=1e-12)
+    np.testing.assert_allclose(
+        np.cross(positions - origin, narrow_world).sum(axis=0), 0.0, atol=1e-12
+    )
+
+
+@pytest.mark.parametrize(
+    ("probe_xy", "expected_xy"),
+    [
+        ((0.0013, -0.0007), (0.0013, -0.0007)),
+        ((0.0039999, -0.0029999), (0.0039999, -0.0029999)),
+        ((0.004, 0.003), (0.004, 0.003)),
+        ((0.005, 0.004), (0.004, 0.003)),
+        ((0.005, 0.001), (0.004, 0.001)),
+    ],
+)
+def test_pad_pressure_center_matches_interior_and_clamps_to_hull(
+    monkeypatch, probe_xy, expected_xy
+):
+    model, data = _probe_pad(monkeypatch, probe_xy, 3)
+    mujoco.mj_forward(model, data)
+    assert data.ncon == 1
+    reader = TactileForceReader(model, right_sensor=None)
+    forces = reader.read(data)["left"]
+    assert forces is not None
+    fz = forces[:, 2]
+    assert np.all(fz >= 0)
+    assert fz.sum() > 0
+    sites = data.site_xpos[list(reader.site_ids("left"))]
+    np.testing.assert_allclose(fz @ sites[:, :2] / fz.sum(), expected_xy, atol=1e-12)
+    wrench = np.zeros(6)
+    mujoco.mj_contactForce(model, data, 0, wrench)
+    np.testing.assert_allclose(forces.sum(axis=0), [0, 0, wrench[0]], atol=1e-12)
+
+
+@pytest.fixture
+def shuffled_grid(monkeypatch):
+    scene = mujoco.MjSpec.from_string("""
+      <mujoco>
+        <option gravity="0 0 0"/>
+        <worldbody>
+          <geom name="probe_geom" type="plane" size=".03 .03 .001"/>
+        </worldbody>
+      </mujoco>
+    """)
+    cells = [(1, 2), (0, 1), (1, 0), (0, 2), (0, 0), (1, 1)]
+    taxels = []
+    for i, (row, col) in enumerate(cells):
+        body = scene.worldbody.add_body(pos=[0.006 * col, 0.006 * row, 0.0019 - i * 0.00005])
+        body.add_freejoint()
+        geom = body.add_geom(
+            name=f"geom_{i}", type=mujoco.mjtGeom.mjGEOM_SPHERE, size=[0.002, 0, 0], mass=0.01
+        )
+        site = body.add_site(name=f"site_{i}")
+        taxels.append({"row": row, "col": col, "geom_name": geom.name, "site_name": site.name})
+    monkeypatch.setattr(
+        tactile,
+        "get_tactile_layout",
+        lambda *args, **kwargs: {
+            "left": {"mode": "contact_geom", "rows": 2, "cols": 3, "taxels": taxels},
+            "right": None,
+        },
+    )
+    return scene.compile(), taxels
+
+
+def test_read_grid_uses_declared_coordinates(shuffled_grid):
+    model, taxels = shuffled_grid
+    data = mujoco.MjData(model)
+    mujoco.mj_forward(model, data)
+    reader = TactileForceReader(model, right_sensor=None)
+    forces = reader.read(data)["left"]
+    assert forces is not None
+    grid = reader.read_grid(data, "left")
+    assert grid.shape == (3, 2, 3)
+    assert np.all(grid[2] > 0)
+    assert np.unique(grid[2]).size == 6
+    for idx, taxel in enumerate(taxels):
+        expected, count = _raw_pad_net_force_local(
+            model, data, taxel["geom_name"], taxel["site_name"]
+        )
+        assert count == 1
+        np.testing.assert_allclose(forces[idx], expected, atol=1e-12)
+        np.testing.assert_allclose(grid[:, taxel["row"], taxel["col"]], expected, atol=1e-12)
+
+
+@pytest.mark.parametrize(
+    "coords",
+    [None, (0, 1), (-1, 0), (2, 0), (0, -1), (1, 3), (1, 2.0), (True, 2)],
+)
+def test_read_grid_rejects_invalid_coverage(shuffled_grid, coords):
+    model, taxels = shuffled_grid
+    if coords is None:
+        taxels.pop()
+    else:
+        taxels[0]["row"], taxels[0]["col"] = coords
+    with pytest.raises(ValueError, match="row"):
+        TactileForceReader(model, right_sensor=None)
 
 
 def test_add_tactile_contact_pairs_deduplicated_and_idempotent():
@@ -333,7 +515,7 @@ def test_paxini_spatial_localization_target_filter_and_read_grid():
             left_sensor="paxini_m2824",
             right_sensor=None,
             prefix="gripper/",
-            target_geoms=["probe_geom"],
+            target_geoms="probe_geom",
         )
         pf = filtered.read(pd)
         assert pf["right"] is None and pf["left"] is not None
@@ -345,6 +527,16 @@ def test_paxini_spatial_localization_target_filter_and_read_grid():
             other_geom_id=pm.geom("probe_geom").id,
         )
         np.testing.assert_allclose(pf["left"].sum(axis=0), expected_probe_only, atol=1e-12)
+        probe_gid = pm.geom("probe_geom").id
+        for target in (probe_gid, ["probe_geom", probe_gid]):
+            equivalent = TactileForceReader(
+                pm,
+                left_sensor="paxini_m2824",
+                right_sensor=None,
+                prefix="gripper/",
+                target_geoms=target,
+            )
+            np.testing.assert_array_equal(equivalent.read(pd)["left"], pf["left"])
         sids = np.array(filtered.site_ids("left"), dtype=np.intp)
         fz = pf["left"][:, 2]
         assert fz.sum() > 0.1

@@ -1,5 +1,7 @@
 """验证夹爪的语义材质、跨格式配色和切换预设时的物理不变性。"""
 
+import json
+import runpy
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -144,8 +146,6 @@ def test_xacro_matches_asset_colors(module):
 @pytest.mark.parametrize("directory", ["sensors", "accessories"])
 def test_discovered_module_requires_mapping(tmp_path, directory):
     """自定义类继承视觉组，未映射的网格须定位到文件，校验保留原文。"""
-    import runpy
-
     build = runpy.run_path(str(get_data_root() / "tools/build_description.py"))
     path = tmp_path / directory / "custom.xml"
     path.parent.mkdir()
@@ -159,6 +159,61 @@ def test_discovered_module_requires_mapping(tmp_path, directory):
     palette.mesh_classes["custom_mesh"] = "pts_housing"
     build["_validate_module_appearances"](tmp_path, palette)
     assert path.read_text() == source
+
+
+@pytest.fixture(scope="module")
+def description_builder():
+    return runpy.run_path(str(get_data_root() / "tools/build_description.py"))
+
+
+def test_paxini_taxel_export_preserves_valid_order(description_builder, tmp_path):
+    path = tmp_path / "taxels.json"
+    taxels = [{"id": i, "pos_m": [0, 0.001, -0.002]} for i in range(135, 0, -1)]
+    path.write_text(json.dumps(taxels))
+    assert description_builder["_load_paxini_taxels"](path) == taxels
+
+
+@pytest.mark.parametrize(
+    ("index", "item", "error"),
+    [
+        (None, {}, "135"),
+        (None, [], "135"),
+        (0, None, "对象"),
+        (0, {"pos_m": [0, 0, 0]}, "id"),
+        (0, {"id": 2, "pos_m": [0, 0, 0]}, "id"),
+        (0, {"id": 0, "pos_m": [0, 0, 0]}, "id"),
+        (0, {"id": 136, "pos_m": [0, 0, 0]}, "id"),
+        (0, {"id": 1.0, "pos_m": [0, 0, 0]}, "id"),
+        (0, {"id": True, "pos_m": [0, 0, 0]}, "id"),
+        (0, {"id": 1}, "pos_m"),
+        (0, {"id": 1, "pos_m": [0, 0]}, "pos_m"),
+        (0, {"id": 1, "pos_m": "000"}, "pos_m"),
+        (0, {"id": 1, "pos_m": [0, 0, "0"]}, "pos_m"),
+        (0, {"id": 1, "pos_m": [0, 0, True]}, "pos_m"),
+        (0, {"id": 1, "pos_m": [0, 0, float("nan")]}, "pos_m"),
+        (0, {"id": 1, "pos_m": [0, 0, float("inf")]}, "pos_m"),
+        (0, {"id": 1, "pos_m": [0, 0, 10**400]}, "pos_m"),
+    ],
+)
+def test_build_rejects_invalid_paxini_taxel_export(
+    description_builder, tmp_path, index, item, error
+):
+    export_dir = tmp_path / "onshape_export"
+    export_dir.mkdir()
+    (export_dir / "raw_gripper.xml").write_text("<mujoco/>")
+    paxini_export_dir = tmp_path / "paxini_export"
+    paxini_export_dir.mkdir()
+    taxels = [{"id": i, "pos_m": [0, 0, 0]} for i in range(1, 136)]
+    if index is None:
+        taxels = item
+    else:
+        taxels[index] = item
+    (paxini_export_dir / "taxels.json").write_text(json.dumps(taxels))
+    out_root = tmp_path / "output"
+
+    with pytest.raises(ValueError, match=rf"taxels\.json.*{error}"):
+        description_builder["build_all"](export_dir, out_root, paxini_export_dir=paxini_export_dir)
+    assert not out_root.exists()
 
 
 def test_two_grippers_preserve_host_appearance():

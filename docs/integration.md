@@ -151,13 +151,17 @@ reader = TactileForceReader(
     left_sensor="pts_2_0",
     right_sensor="paxini_m2824",
     prefix="gripper/",
-    target_geoms=["cube/target_cube_geom"],
+    target_geoms="cube/target_cube_geom",
 )
 ```
 
 现有 `tactile_grasp` 的场景生成和触觉读取器要求双侧 3×3，直接接入时使用双 PTS，可通过 `reader.read_grid(data, side)` 直接获取 `(3, rows, cols)` 数组；支持异构模组（含 135 测点 `paxini_m2824`）或手写读取逻辑时，按以下规则接入：
-- **`add_tactile_contact_pairs` / `TactileForceReader`（推荐）**：自动根据 `layout[side]["mode"]` 处理配对与读取——为 `contact_geom`（`pts_2_0`）注册逐球 `<pair>` 并在各球 `site` 读取精确三维力（`read(data)` 返回 `(9, 3)`）；为 `pad_sites`（`paxini_m2824`）仅注册**单条** `(pad_geom_name, object_geom)` `<pair>`，并以默认 `pad_sigma_m=0.0025` m 的对数稳定化高斯空间核将垫块上的所有接触力守恒插值至 135 个 `site` 局部坐标系（`read(data)` 返回 `(135, 3)`，[Fx, Fy, Fz] 三轴合力严格守恒且保留压力中心与扭转力偶）；无触觉侧返回 `None`。
+- **`add_tactile_contact_pairs` / `TactileForceReader`（推荐）** 根据 `layout[side]["mode"]` 处理配对与读取。为 `contact_geom`（`pts_2_0`）逐球注册 `<pair>` 并读取各球的三维力。为 `pad_sites`（`paxini_m2824`）仅对整块平垫和目标几何体注册一条 `<pair>`，并把接触力分配到 135 个测点。`read(data)` 按 `layout[side]["taxels"]` 顺序返回各测点局部坐标系中的 `[Fx, Fy, Fz]`，无触觉侧返回 `None`。`read_grid(data, side)` 按测点声明的 `row` 和 `col` 排列。`target_geoms` 接受单个几何体名称、ID 或两者的序列。
 - **手动查询 `layout`**：`contact_geom` 为每个 `taxel["geom_name"]` 注册 `<pair>`；`pad_sites` 整块平垫共用顶层 `layout[side]["pad_geom_name"]`，**仅可对该碰撞体注册一次 `<pair>`**（MuJoCo 不会对重复 `<pair>` 去重，按测点循环注册会成倍放大接触数量）。用挂载后的 `gripper/tcp` 站点放置场景对象，避免依赖两侧中心 taxel。自定义环境碰撞掩码时，壳体使用类型位 `4`，指间接触面使用类型位 `8`，二者均与默认环境类型位 `1` 交互。
+
+对 `pad_sites`，读取器从高斯权重（默认 `pad_sigma_m=0.0025` m）出发，在首个测点的切平面内校正权重质心。每个接触的权重非负且和为一，将各测点力转换到同一坐标系后求和，三维合力守恒至浮点精度。投影接触点位于测点凸包内时，重构平面压力中心及平面力臂产生的一阶力矩。投影接触点位于凸包外时，按最近的凸包边界点重构压力中心及相应力矩。
+
+使用 `condim=4` 或 `6` 时，接触法向扭矩在垫面法向上的分量由高斯加权的零合力切向力偶重构。加权力臂方差不超过 1e-16 m² 时省略该力偶。`condim=6` 的两个滚动力矩分量省略。对测点法向一致的平垫，纯压缩时各测点的 `Fz` 均非负。
 
 真机的 `*_sensor_link` 与安装系同向，`taxel_*` 受力站点相对安装系绕局部 X 轴旋转 **Rx(π)**，各原点在相应球心。桥接 `hub_*/sensor_*` 的六轴 wrench 时，先核对 `frame_id` 和参考原点。变换力及力矩时使用同一旋转，移动力矩参考点时添加相应的力臂叉乘项，并将协议的 N·mm 转为 N·m。当前仿真读取器输出逐触点三轴力。
 

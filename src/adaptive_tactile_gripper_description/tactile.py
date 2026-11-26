@@ -24,6 +24,7 @@ else:
 _VALID_CONDIM = (1, 3, 4, 6)
 _TORSIONAL_FRICTION = 0.02
 _ROLLING_FRICTION = 0.001
+_MIN_COUPLE_VARIANCE_M2 = 1e-16
 
 
 def add_tactile_contact_pairs(
@@ -124,21 +125,116 @@ def add_tactile_contact_pairs(
 class _SideSpec:
     mode: str
     site_ids: np.ndarray
-    rows: int | None
-    cols: int | None
+    grid_indices: np.ndarray | None
     geom_to_index: dict[int, int]
     pad_geom_id: int | None
+
+
+def _grid_indices(layout: dict[str, Any]) -> np.ndarray:
+    rows, cols = layout["rows"], layout["cols"]
+    if type(rows) is not int or type(cols) is not int or rows < 1 or cols < 1:
+        raise ValueError("触觉网格 rows 和 cols 必须为正整数")
+    taxels = layout["taxels"]
+    if len(taxels) != rows * cols:
+        raise ValueError("触觉测点必须覆盖 rows × cols 网格")
+    indices = np.full((rows, cols), -1, dtype=np.intp)
+    for idx, taxel in enumerate(taxels):
+        row, col = taxel.get("row"), taxel.get("col")
+        if (
+            type(row) is not int
+            or type(col) is not int
+            or not (0 <= row < rows and 0 <= col < cols)
+        ):
+            raise ValueError(f"触觉网格 row/col 无效或越界：{(row, col)!r}")
+        if indices[row, col] != -1:
+            raise ValueError(f"触觉网格 row/col 重复：{(row, col)!r}")
+        indices[row, col] = idx
+    return indices
+
+
+def _convex_hull_indices(xy: np.ndarray) -> np.ndarray:
+    """Return the counterclockwise hull of the projected taxels."""
+    points, indices = np.unique(xy, axis=0, return_index=True)
+    if len(points) <= 2:
+        return indices
+
+    sorted_xy = points.tolist()
+
+    def half_hull(order: range) -> list[int]:
+        half: list[int] = []
+        for i in order:
+            x, y = sorted_xy[i]
+            while len(half) >= 2:
+                ax, ay = sorted_xy[half[-2]]
+                bx, by = sorted_xy[half[-1]]
+                if (bx - ax) * (y - ay) - (by - ay) * (x - ax) > 0:
+                    break
+                half.pop()
+            half.append(i)
+        return half
+
+    lo = half_hull(range(len(points)))
+    hi = half_hull(range(len(points) - 1, -1, -1))
+    return indices[lo[:-1] + hi[:-1]]
+
+
+def _match_pad_moment(
+    weights: np.ndarray,
+    xy: np.ndarray,
+    target: np.ndarray,
+    hull: np.ndarray,
+) -> np.ndarray:
+    """Move the Gaussian centroid to the target or its closest point on the hull."""
+    if len(hull) == 1:
+        return weights
+    vertices = xy[hull]
+    edges = np.roll(vertices, -1, axis=0) - vertices
+    edge_sq = np.einsum("ij,ij->i", edges, edges)
+    inward = np.column_stack((-edges[:, 1], edges[:, 0]))
+    target_rel = target - vertices
+    if len(hull) == 2 or np.any(np.einsum("ij,ij->i", target_rel, inward) < 0.0):
+        fractions = np.clip(np.einsum("ij,ij->i", target_rel, edges) / edge_sq, 0.0, 1.0)
+        residual = target_rel - fractions[:, None] * edges
+        edge_idx = int(np.argmin(np.einsum("ij,ij->i", residual, residual)))
+        endpoint_fraction = fractions[edge_idx]
+        blend = 1.0
+    else:
+        mean = weights @ xy
+        direction = target - mean
+        if np.linalg.norm(direction) <= 1e-12:
+            return weights
+        # Extend the centroid-to-target ray to the hull. Mixing in the force
+        # at that intersection corrects the moment with nonnegative weights.
+        approach = -(inward @ direction)
+        mean_dist = np.einsum("ij,ij->i", mean - vertices, inward)
+        steps = np.full(len(hull), np.inf)
+        np.divide(mean_dist, approach, out=steps, where=approach > 0.0)
+        edge_idx = int(np.argmin(steps))
+        step = max(1.0, steps[edge_idx])
+        blend = 1.0 / step
+        intersection = (mean - vertices[edge_idx]) + step * direction
+        endpoint_fraction = np.clip(intersection @ edges[edge_idx] / edge_sq[edge_idx], 0.0, 1.0)
+
+    matched = (1.0 - blend) * weights
+    matched[hull[edge_idx]] += blend * (1.0 - endpoint_fraction)
+    matched[hull[(edge_idx + 1) % len(hull)]] += blend * endpoint_fraction
+    return matched
 
 
 class TactileForceReader:
     """统一的 MuJoCo 指尖三轴触觉力读取器，兼容 ``contact_geom`` 与 ``pad_sites``。
 
     ``read(data)`` 按侧返回形状为 ``(N, 3)`` 的浮点数组（列顺序 ``[Fx, Fy, Fz]``，单位 N，表达在各测点
-    ``site`` 局部坐标系下，受压时 ``Fz > 0``）；无触觉的一侧返回 ``None``。
+    ``site`` 局部坐标系下），测点顺序与 ``layout[side]["taxels"]`` 一致，无触觉的一侧返回 ``None``。
 
-    对 ``pad_sites`` 模组（如 135 测点的 ``paxini_m2824``），读取器提取 ``pad_geom_name`` 上的全部三维接触力与
-    接触点位置，按对数稳定化的高斯空间核 ``exp(-||s_i - p_k||^2 / (2 * pad_sigma_m^2))`` 归一化插值到各测点，
-    严格守恒三维合力并保留压力中心与切向扭转力偶。
+    对 ``pad_sites``，用高斯权重分配接触力，并在首个测点的切平面内校正权重质心。
+    凸包内重构投影压力中心及平面力臂产生的一阶力矩，凸包外将接触点投影至最近的凸包边界。
+    权重非负且和为一，三维合力在同一坐标系内守恒（至浮点精度）。
+    ``condim=4/6`` 的接触法向扭矩在垫面法向上的分量由高斯加权的零合力切向力偶重构，
+    加权力臂方差不超过 1e-16 m² 时省略该力偶。``condim=6`` 的两个滚动力矩分量省略。
+    对法向一致的平垫，纯压缩时各测点 ``Fz >= 0``。
+
+    ``target_geoms`` 可为单个 geom 名称、ID 或两者的序列，省略时读取所有接触对象。
     """
 
     def __init__(
@@ -149,7 +245,7 @@ class TactileForceReader:
         right_sensor: str | None = "pts_2_0",
         prefix: str = "",
         pad_sigma_m: float = 0.0025,
-        target_geoms: Sequence[str | int] | None = None,
+        target_geoms: str | int | Sequence[str | int] | None = None,
     ) -> None:
         if pad_sigma_m <= 0.0 or not np.isfinite(pad_sigma_m):
             raise ValueError(f"pad_sigma_m 必须为有限正数，当前为 {pad_sigma_m!r}")
@@ -168,6 +264,7 @@ class TactileForceReader:
                 self._sides[side] = None
                 continue
             mode = side_layout["mode"]
+            grid_indices = _grid_indices(side_layout) if mode == "contact_geom" else None
             site_ids = np.array(
                 [
                     self._require_id(model, _mj.mjtObj.mjOBJ_SITE, t["site_name"])
@@ -184,8 +281,7 @@ class TactileForceReader:
                 self._sides[side] = _SideSpec(
                     mode=mode,
                     site_ids=site_ids,
-                    rows=int(side_layout["rows"]),
-                    cols=int(side_layout["cols"]),
+                    grid_indices=grid_indices,
                     geom_to_index=geom_to_index,
                     pad_geom_id=None,
                 )
@@ -197,8 +293,7 @@ class TactileForceReader:
                 self._sides[side] = _SideSpec(
                     mode=mode,
                     site_ids=site_ids,
-                    rows=None,
-                    cols=None,
+                    grid_indices=None,
                     geom_to_index={},
                     pad_geom_id=pad_gid,
                 )
@@ -215,10 +310,11 @@ class TactileForceReader:
 
     @classmethod
     def _resolve_target_geoms(
-        cls, model: MjModel, target_geoms: Sequence[str | int]
+        cls, model: MjModel, target_geoms: str | int | Sequence[str | int]
     ) -> frozenset[int]:
         resolved: set[int] = set()
-        for item in target_geoms:
+        items = (target_geoms,) if isinstance(target_geoms, (str, int)) else target_geoms
+        for item in items:
             if isinstance(item, str):
                 resolved.add(cls._require_id(model, _mj.mjtObj.mjOBJ_GEOM, item))
             else:
@@ -243,7 +339,10 @@ class TactileForceReader:
     def read(self, data: MjData) -> dict[str, np.ndarray | None]:
         """读取当前帧左右指尖的 ``(N, 3)`` 局部三轴触觉力 ``[Fx, Fy, Fz]``（单位 N）。"""
         result: dict[str, np.ndarray | None] = {}
-        pad_contacts: dict[str, list[tuple[np.ndarray, np.ndarray]]] = {"left": [], "right": []}
+        pad_contacts: dict[str, list[tuple[np.ndarray, np.ndarray, np.ndarray]]] = {
+            "left": [],
+            "right": [],
+        }
         for side, spec in self._sides.items():
             result[side] = (
                 None if spec is None else np.zeros((len(spec.site_ids), 3), dtype=np.float64)
@@ -256,9 +355,11 @@ class TactileForceReader:
             if g1 not in self._geom_owners and g2 not in self._geom_owners:
                 continue
             _mj.mj_contactForce(self._model, data, cid, cfrc)
-            if not np.any(cfrc[:3]):
+            if not np.any(cfrc[:4]):
                 continue
-            f_on_g2_world = np.asarray(con.frame, dtype=np.float64).reshape(3, 3).T @ cfrc[:3]
+            contact_frame = np.asarray(con.frame, dtype=np.float64).reshape(3, 3)
+            f_on_g2_world = contact_frame.T @ cfrc[:3]
+            twist_on_g2_world = cfrc[3] * contact_frame[0]
             for sensor_gid, other_gid, sign in ((g1, g2, -1.0), (g2, g1, 1.0)):
                 owners = self._geom_owners.get(sensor_gid)
                 if not owners:
@@ -278,36 +379,61 @@ class TactileForceReader:
                         out[idx] += rot.T @ force_world
                     else:
                         pad_contacts[side].append(
-                            (np.asarray(con.pos, dtype=np.float64).copy(), force_world)
+                            (
+                                np.asarray(con.pos, dtype=np.float64).copy(),
+                                force_world,
+                                sign * twist_on_g2_world,
+                            )
                         )
 
-        inv_two_var = 0.5 / (self._pad_sigma_m * self._pad_sigma_m)
         for side, contacts in pad_contacts.items():
             if not contacts:
                 continue
             spec = self._sides[side]
             assert spec is not None
             site_pos = np.asarray(data.site_xpos[spec.site_ids], dtype=np.float64)
-            con_pos = np.stack([item[0] for item in contacts], axis=0)
-            con_forces = np.stack([item[1] for item in contacts], axis=0)
-            diff = site_pos[:, None, :] - con_pos[None, :, :]
-            sq_dist = np.sum(diff * diff, axis=-1)
-            shifted = sq_dist - np.min(sq_dist, axis=0, keepdims=True)
-            weights = np.exp(-inv_two_var * shifted)
-            weights /= np.sum(weights, axis=0, keepdims=True)
-            taxel_forces_world = weights @ con_forces
             site_rot = np.asarray(data.site_xmat[spec.site_ids], dtype=np.float64).reshape(-1, 3, 3)
-            result[side] = np.einsum("nij,ni->nj", site_rot, taxel_forces_world)
+            pad_rot = site_rot[0]
+            tangent = pad_rot[:, :2]
+            normal = pad_rot[:, 2]
+            xy = (site_pos - site_pos[0]) @ tangent
+            hull = _convex_hull_indices(xy)
+            taxel_forces = np.zeros_like(site_pos)
+            for pos, force, twist in contacts:
+                delta = site_pos - pos
+                sq_dist = np.einsum("ij,ij->i", delta, delta)
+                # Scaling the distance avoids squaring a tiny sigma. Overflow
+                # in the exponent gives zero weight; the closest site has weight 1.
+                distance = np.sqrt(sq_dist - sq_dist.min())
+                with np.errstate(over="ignore", under="ignore"):
+                    gaussian = np.exp(-0.5 * (distance / self._pad_sigma_m) ** 2)
+                gaussian /= gaussian.sum()
+                weights = _match_pad_moment(gaussian, xy, (pos - site_pos[0]) @ tangent, hull)
+                taxel_forces += weights[:, None] * (force @ pad_rot)
+
+                twist_z = twist @ normal
+                if twist_z != 0.0:
+                    # Rotate the centered moment arms by 90 degrees to get
+                    # zero net shear and a moment proportional to the variance.
+                    offset = xy - gaussian @ xy
+                    weighted_offset = gaussian[:, None] * offset
+                    variance = np.sum(weighted_offset * offset)
+                    if variance > _MIN_COUPLE_VARIANCE_M2:
+                        couple = np.column_stack((-weighted_offset[:, 1], weighted_offset[:, 0]))
+                        taxel_forces[:, :2] += (twist_z / variance) * couple
+            if np.any(site_rot != pad_rot):
+                taxel_forces = np.einsum("nij,ni->nj", site_rot, taxel_forces @ pad_rot.T)
+            result[side] = taxel_forces
 
         return result
 
     def read_grid(self, data: MjData, side: str) -> np.ndarray:
-        """对规则网格传感器（如 3x3 ``pts_2_0``）返回形状为 ``(3, rows, cols)`` 的力张量。"""
+        """按测点声明的 ``row`` 和 ``col`` 返回 ``(3, rows, cols)`` 的网格力张量。"""
         if side not in self._sides:
             raise ValueError(f"side 必须为 'left' 或 'right'，当前为 {side!r}")
         spec = self._sides[side]
-        if spec is None or spec.rows is None or spec.cols is None:
+        if spec is None or spec.grid_indices is None:
             raise ValueError(f"{side!r} 侧模组不是规则行列网格，请改用 read(data)[{side!r}]")
         forces = self.read(data)[side]
         assert forces is not None
-        return forces.reshape(spec.rows, spec.cols, 3).transpose(2, 0, 1)
+        return forces[spec.grid_indices].transpose(2, 0, 1)

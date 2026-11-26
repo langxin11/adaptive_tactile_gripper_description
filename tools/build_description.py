@@ -424,6 +424,33 @@ def _copy_and_rename_meshes(
     return referenced
 
 
+def _load_paxini_taxels(path: Path) -> list[dict[str, object]]:
+    """读取并验证 PaXini 测点导出，保留原始顺序。"""
+    taxels = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(taxels, list) or len(taxels) != 135:
+        raise ValueError(f"{path} 必须包含 135 个测点的列表")
+
+    ids: set[int] = set()
+    for index, item in enumerate(taxels):
+        if not isinstance(item, dict):
+            raise ValueError(f"{path} 第 {index + 1} 项必须为对象")
+        taxel_id = item.get("id")
+        if type(taxel_id) is not int or not 1 <= taxel_id <= 135 or taxel_id in ids:
+            raise ValueError(f"{path} 第 {index + 1} 项的 id 必须为 1..135 内的唯一整数")
+        ids.add(taxel_id)
+
+        pos = item.get("pos_m")
+        if (
+            not isinstance(pos, list)
+            or len(pos) != 3
+            or not all(
+                type(value) in (int, float) and abs(value) <= sys.float_info.max for value in pos
+            )
+        ):
+            raise ValueError(f"{path} 中 id={taxel_id} 的 pos_m 必须包含 3 个有限数值")
+    return taxels
+
+
 def _copy_paxini_meshes(paxini_export_dir: Path, out_meshes_dir: Path) -> None:
     """将 PaXini M2824 传感器与转接垫块 STL 复制到 meshes/paxini_m2824/ 子目录。"""
     sub_dir = out_meshes_dir / "paxini_m2824"
@@ -2371,13 +2398,13 @@ def build_all(
     if not raw_xml.is_file():
         raise FileNotFoundError(f"未找到导出文件: {raw_xml}")
 
+    paxini_taxels = _load_paxini_taxels(paxini_export_dir / "taxels.json")
     raw_data = raw_xml.read_bytes()
     raw_root = ET.fromstring(raw_data)
     meshes_dir = out_root / "meshes"
     palette = Appearance.from_library(_build_appearance_library(raw_root, out_root), appearance)
     _copy_and_rename_meshes(raw_root, raw_assets, meshes_dir)
     _copy_paxini_meshes(paxini_export_dir, meshes_dir)
-    paxini_taxels = json.loads((paxini_export_dir / "taxels.json").read_text(encoding="utf-8"))
 
     phi_print, rho_pla, rho_placf = _solve_print_fill_ratio(raw_root, meshes_dir)
 

@@ -1469,7 +1469,7 @@ def _build_chassis_mjcf(
     drive_jnt.set("frictionloss", "0.04")
     drive_jnt.set("damping", "0.02532329")
     drive_jnt.set("armature", "0.002074755")
-    drive_jnt.set("solreflimit", "-30000 -600")
+    drive_jnt.set("solreflimit", "0.002 1")
     drive_jnt.set("solimplimit", "0.99 0.999 0.0001 0.5 2")
     backlash = ET.Element(
         "joint",
@@ -1482,7 +1482,7 @@ def _build_chassis_mjcf(
             "damping": "0",
             "armature": "0",
             "solreflimit": "0.002 1",
-            "solimplimit": "0.95 0.99 0.0001 0.5 2",
+            "solimplimit": "0.99 0.999 0.0001 0.5 2",
         },
     )
     motor_children = list(motor)
@@ -1544,7 +1544,7 @@ def _build_chassis_mjcf(
         jnt.set("damping", "0.01")
         jnt.set("armature", "0")
         jnt.set("range", f"0 {SINGLE_FINGER_STROKE_M:.16g}")
-        jnt.set("solreflimit", "-30000 -600")
+        jnt.set("solreflimit", "0.002 1")
         jnt.set("solimplimit", "0.99 0.999 0.0001 0.5 2")
 
         finger_parts: list[InertialPart] = []

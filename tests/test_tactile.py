@@ -997,3 +997,164 @@ def test_rigid_pad_refreshes_cache_when_geom_size_changes():
     assert reused_forces is not None and fresh_forces is not None
     assert fresh_forces[:, 2].sum() > 0.05
     np.testing.assert_allclose(reused_forces, fresh_forces, atol=1e-12)
+
+
+def test_paxini_rotated_box_excludes_side_wall_contacts():
+    """验证旋转方块同时压到前缘与侧壁且法向一致时，刚性与非刚性路径均排除侧壁接触。"""
+    scene = mujoco.MjSpec()
+    scene.option.gravity = [0.0, 0.0, 0.0]
+    scene.attach(
+        build_gripper_spec(
+            left_sensor="paxini_m2824", right_sensor=None, with_camera=False, fixed_base=True
+        ),
+        prefix="gripper/",
+        frame=scene.worldbody.add_frame(),
+    )
+    ref_model = scene.compile()
+    ref_data = mujoco.MjData(ref_model)
+    mujoco.mj_forward(ref_model, ref_data)
+    pad_gid_ref = ref_model.geom("gripper/left_pad_collision").id
+    pad_pos = ref_data.geom_xpos[pad_gid_ref].copy()
+    pad_rot = ref_data.geom_xmat[pad_gid_ref].reshape(3, 3).copy()
+    half_z = float(ref_model.geom_size[pad_gid_ref, 2])
+
+    # 该位姿下的 10 mm 旋转立方体会在前缘 (z=+half_z) 与侧壁 (z≈+0.63/+1.05 mm) 产生同向斜接触。
+    cube_local_pos = np.array([0.01916924, 0.00811148, 0.000781])
+    cube_local_quat = np.array([-0.28553788, -0.74897952, 0.4641934, 0.37685844])
+    cube_local_quat /= np.linalg.norm(cube_local_quat)
+    pad_quat = np.empty(4, dtype=np.float64)
+    world_quat = np.empty(4, dtype=np.float64)
+    mujoco.mju_mat2Quat(pad_quat, pad_rot.ravel())
+    mujoco.mju_mulQuat(world_quat, pad_quat, cube_local_quat)
+    probe = scene.worldbody.add_body(
+        name="rotated_cube",
+        pos=(pad_pos + pad_rot @ cube_local_pos).tolist(),
+        quat=world_quat.tolist(),
+    )
+    probe.add_geom(
+        name="rotated_cube_geom",
+        type=mujoco.mjtGeom.mjGEOM_BOX,
+        size=[0.005, 0.005, 0.005],
+        contype=0,
+        conaffinity=2,
+    )
+    add_tactile_contact_pairs(
+        scene,
+        "rotated_cube_geom",
+        left_sensor="paxini_m2824",
+        right_sensor=None,
+        prefix="gripper/",
+    )
+
+    model = scene.compile()
+    data = mujoco.MjData(model)
+    data.ctrl[0] = 1.0
+    mujoco.mj_forward(model, data)
+
+    pad_gid = model.geom("gripper/left_pad_collision").id
+    cube_gid = model.geom("rotated_cube_geom").id
+    pad_pos_w = data.geom_xpos[pad_gid]
+    pad_rot_w = data.geom_xmat[pad_gid].reshape(3, 3)
+    site_rot_w = data.site_xmat[model.site("gripper/left_pad_center").id].reshape(3, 3)
+
+    cfrc = np.empty(6, dtype=np.float64)
+    front_only_local = np.zeros(3, dtype=np.float64)
+    side_wall_loaded = 0
+    for cid in range(data.ncon):
+        con = data.contact[cid]
+        if {con.geom1, con.geom2} != {pad_gid, cube_gid}:
+            continue
+        sign = 1.0 if con.geom2 == pad_gid else -1.0
+        frame = np.asarray(con.frame, dtype=np.float64).reshape(3, 3)
+        n_into_pad = sign * frame[0]
+        pos_on_pad_local = (
+            np.asarray(con.pos, dtype=np.float64) + 0.5 * float(con.dist) * n_into_pad - pad_pos_w
+        ) @ pad_rot_w
+        mujoco.mj_contactForce(model, data, cid, cfrc)
+        f_on_pad_local = site_rot_w.T @ (sign * (frame.T @ cfrc[:3]))
+        if abs(float(pos_on_pad_local[2]) - half_z) < 5e-5:
+            front_only_local += f_on_pad_local
+        elif float(pos_on_pad_local[2]) > 0.0 and float(cfrc[0]) > 0.1:
+            side_wall_loaded += 1
+
+    assert side_wall_loaded >= 2
+    assert front_only_local[2] > 0.5
+
+    # 校验刚性缓存路径
+    rigid_reader = TactileForceReader(
+        model,
+        left_sensor="paxini_m2824",
+        right_sensor=None,
+        prefix="gripper/",
+        target_geoms="rotated_cube_geom",
+    )
+    rigid_forces = rigid_reader.read(data)["left"]
+    assert rigid_forces is not None
+    np.testing.assert_allclose(rigid_forces.sum(axis=0), front_only_local, atol=1e-11)
+
+    # 校验非刚性路径（使其中一个 taxel site 位于独立子刚体上，自然禁用刚性缓存）
+    non_rigid_spec = scene.copy()
+    sub_body = non_rigid_spec.body("gripper/left_sensor_body").add_body(name="taxel_carrier")
+    moved = non_rigid_spec.site("gripper/left_taxel_001")
+    moved_pos, moved_quat, moved_size = list(moved.pos), list(moved.quat), list(moved.size)
+    non_rigid_spec.delete(moved)
+    sub_body.add_site(
+        name="gripper/left_taxel_001",
+        pos=moved_pos,
+        quat=moved_quat,
+        size=moved_size,
+    )
+    nr_model = non_rigid_spec.compile()
+    nr_data = mujoco.MjData(nr_model)
+    nr_data.ctrl[0] = 1.0
+    mujoco.mj_forward(nr_model, nr_data)
+    non_rigid_reader = TactileForceReader(
+        nr_model,
+        left_sensor="paxini_m2824",
+        right_sensor=None,
+        prefix="gripper/",
+        target_geoms="rotated_cube_geom",
+    )
+    assert non_rigid_reader._rigid_pads["left"] is None
+    nr_forces = non_rigid_reader.read(nr_data)["left"]
+    assert nr_forces is not None
+    np.testing.assert_allclose(nr_forces.sum(axis=0), front_only_local, atol=1e-11)
+
+
+def test_add_tactile_contact_pairs_lazy_contact_defaults(monkeypatch):
+    """验证传感器规格无 contact 块时，全量覆写可注册接触对，缺省某项时报错指明缺失字段。"""
+    real_get_sensor_spec = tactile.get_sensor_spec
+
+    def _spec_without_contact(name: str):
+        spec = dict(real_get_sensor_spec(name))
+        spec.pop("contact", None)
+        return spec
+
+    monkeypatch.setattr(tactile, "get_sensor_spec", _spec_without_contact)
+
+    scene = _attach_gripper_and_box(left_sensor="paxini_m2824", right_sensor=None)
+    added = add_tactile_contact_pairs(
+        scene,
+        "cube/target_cube_geom",
+        left_sensor="paxini_m2824",
+        right_sensor=None,
+        prefix="gripper/",
+        friction_coefficient=0.8,
+        solref=(-1200.0, -10.0),
+        solimp=(0.75, 0.95, 0.0025, 0.5, 2.0),
+    )
+    assert len(added) == 1
+
+    base_kwargs = {
+        "left_sensor": "paxini_m2824",
+        "right_sensor": None,
+        "prefix": "gripper/",
+        "friction_coefficient": 0.8,
+        "solref": (-1200.0, -10.0),
+        "solimp": (0.75, 0.95, 0.0025, 0.5, 2.0),
+    }
+    for omitted in ("friction_coefficient", "solref", "solimp"):
+        kwargs = {k: v for k, v in base_kwargs.items() if k != omitted}
+        fresh_scene = _attach_gripper_and_box(left_sensor="paxini_m2824", right_sensor=None)
+        with pytest.raises(ValueError, match=omitted):
+            add_tactile_contact_pairs(fresh_scene, "cube/target_cube_geom", **kwargs)

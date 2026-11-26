@@ -26,6 +26,15 @@ _TORSIONAL_FRICTION = 0.02
 _ROLLING_FRICTION = 0.001
 _MIN_COUPLE_VARIANCE_M2 = 1e-16
 _FRONT_FACE_NORMAL_MIN_DOT = 0.5
+_FRONT_FACE_PLANE_TOL_M = 5e-5
+
+
+def _require_contact_default(sensor_name: str, contact_cfg: dict[str, Any] | None, key: str) -> Any:
+    if contact_cfg is None or key not in contact_cfg or contact_cfg[key] is None:
+        raise ValueError(
+            f"传感器 {sensor_name!r} 缺少默认接触参数 contact.{key}，请在 YAML 中补充或显式传入 {key}"
+        )
+    return contact_cfg[key]
 
 
 def add_tactile_contact_pairs(
@@ -76,14 +85,35 @@ def add_tactile_contact_pairs(
         else:
             raise ValueError(f"未知触觉布局模式 {mode!r}")
 
-        contact_cfg = get_sensor_spec(sensor_name)["contact"]
+        contact_cfg: dict[str, Any] | None = None
+        if friction_coefficient is None or solref is None or solimp is None:
+            raw_contact = get_sensor_spec(sensor_name).get("contact")
+            if isinstance(raw_contact, dict):
+                contact_cfg = raw_contact
+
         mu = float(
             friction_coefficient
             if friction_coefficient is not None
-            else contact_cfg["friction_coefficient"]
+            else _require_contact_default(sensor_name, contact_cfg, "friction_coefficient")
         )
-        pair_solref = [float(x) for x in (solref if solref is not None else contact_cfg["solref"])]
-        pair_solimp = [float(x) for x in (solimp if solimp is not None else contact_cfg["solimp"])]
+        if mu < 0.0:
+            raise ValueError(f"friction_coefficient 不能为负数：{mu!r}")
+        pair_solref = [
+            float(x)
+            for x in (
+                solref
+                if solref is not None
+                else _require_contact_default(sensor_name, contact_cfg, "solref")
+            )
+        ]
+        pair_solimp = [
+            float(x)
+            for x in (
+                solimp
+                if solimp is not None
+                else _require_contact_default(sensor_name, contact_cfg, "solimp")
+            )
+        ]
         pair_friction = [
             mu,
             mu,
@@ -739,13 +769,18 @@ class TactileForceReader:
                 local_pos = rigid.local_pos
                 xy = rigid.xy
                 hull_geom = rigid.hull
+                has_box_front_face = is_box_pad and bool(np.any(rigid.face_origin_in_geom != 0.0))
                 taxel_forces = np.zeros_like(local_pos)
                 for pos, force, twist, normal_into_pad, con_dist in contacts:
                     if float(normal_into_pad @ normal) <= _FRONT_FACE_NORMAL_MIN_DOT:
                         continue
                     pos_on_pad = pos + 0.5 * con_dist * normal_into_pad
-                    if is_box_pad and float((pos_on_pad - geom_pos_w) @ normal) > 0.0:
-                        continue
+                    if is_box_pad:
+                        if has_box_front_face:
+                            if abs(float((pos_on_pad - origin) @ normal)) > _FRONT_FACE_PLANE_TOL_M:
+                                continue
+                        elif float((pos_on_pad - geom_pos_w) @ normal) > 0.0:
+                            continue
                     pos_local = (pos - origin) @ pad_rot
                     delta = local_pos - pos_local
                     sq_dist = np.einsum("ij,ij->i", delta, delta)
@@ -789,13 +824,18 @@ class TactileForceReader:
             normal = pad_rot[:, 2]
             xy = (site_pos - origin) @ tangent
             hull_geom = _build_hull_geometry(xy)
+            has_box_front_face = is_box_pad and bool(np.any(face_origin_in_geom != 0.0))
             taxel_forces = np.zeros_like(site_pos)
             for pos, force, twist, normal_into_pad, con_dist in contacts:
                 if float(normal_into_pad @ normal) <= _FRONT_FACE_NORMAL_MIN_DOT:
                     continue
                 pos_on_pad = pos + 0.5 * con_dist * normal_into_pad
-                if is_box_pad and float((pos_on_pad - geom_pos_w) @ normal) > 0.0:
-                    continue
+                if is_box_pad:
+                    if has_box_front_face:
+                        if abs(float((pos_on_pad - origin) @ normal)) > _FRONT_FACE_PLANE_TOL_M:
+                            continue
+                    elif float((pos_on_pad - geom_pos_w) @ normal) > 0.0:
+                        continue
                 pos_local = (pos - origin) @ pad_rot
                 delta = site_pos - pos
                 sq_dist = np.einsum("ij,ij->i", delta, delta)

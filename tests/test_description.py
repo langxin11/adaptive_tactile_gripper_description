@@ -356,3 +356,44 @@ def test_unloaded_chassis_overshoot_stays_clear_of_opposing_slider():
                 dist = float(mujoco.mj_geomDistance(model, data, s_gid, b_gid, 1.0, fromto))
                 min_clearance = min(min_clearance, dist)
         assert min_clearance > 0.0, (torque, min_clearance)
+
+
+@pytest.mark.parametrize("timestep", [0.004, 0.005])
+def test_attached_chassis_reopens_cleanly_at_non_default_timestep(timestep):
+    """验证挂载到宿主场景且使用非默认步长（4/5 ms）时，空载底盘急闭后反向张开稳定无发散。"""
+    scene = mujoco.MjSpec()
+    scene.option.timestep = timestep
+    carrier = scene.worldbody.add_body(name="carrier", pos=[0.0, 0.0, 0.5])
+    scene.attach(
+        build_gripper_spec(
+            left_sensor=None,
+            right_sensor=None,
+            with_camera=False,
+            fixed_base=True,
+        ),
+        prefix="gripper/",
+        frame=carrier.add_frame(),
+    )
+    model = scene.compile()
+    steps_per_phase = round(1.0 / timestep)
+    for close_torque in (1.0, 4.0):
+        data = mujoco.MjData(model)
+        prev_time = -1.0
+        data.ctrl[0] = close_torque
+        for _ in range(steps_per_phase):
+            mujoco.mj_step(model, data)
+            assert data.time > prev_time
+            assert np.all(np.isfinite(data.qacc))
+            prev_time = float(data.time)
+        data.ctrl[0] = -4.0
+        for _ in range(steps_per_phase):
+            mujoco.mj_step(model, data)
+            assert data.time > prev_time
+            assert np.all(np.isfinite(data.qacc))
+            prev_time = float(data.time)
+        assert math.isclose(float(data.time), 2.0, abs_tol=1e-6)
+        q_eff = float(
+            data.joint("gripper/gripper_drive").qpos[0]
+            + data.joint("gripper/gripper_backlash").qpos[0]
+        )
+        assert q_eff < 0.02

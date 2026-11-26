@@ -104,8 +104,8 @@
       <site name="tcp" pos="0 0 0.14555" group="4" />
       <body name="motor" pos="0 0 0.04105" quat="1 0 0 9.8354e-08">
         <inertial pos="0 0 0.01304976" mass="0.059605349" fullinertia="8.2802594e-06 8.2802497e-06 9.9379758e-06 -3.1479638e-07 0 0" />
-        <joint name="gripper_drive" solreflimit="-30000 -600" solimplimit="0.99 0.999 0.0001 0.5 2" range="0 1.7" armature="0.002074755" damping="0.02532329" frictionloss="0.04" axis="0 0 1" type="hinge" />
-        <joint name="gripper_backlash" solreflimit="0.002 1" solimplimit="0.95 0.99 0.0001 0.5 2" range="-0.0025 0.0025" frictionloss="0" axis="0 0 1" type="hinge" damping="0" armature="0" />
+        <joint name="gripper_drive" solreflimit="0.002 1" solimplimit="0.99 0.999 0.0001 0.5 2" range="0 1.7" armature="0.002074755" damping="0.02532329" frictionloss="0.04" axis="0 0 1" type="hinge" />
+        <joint name="gripper_backlash" solreflimit="0.002 1" solimplimit="0.99 0.999 0.0001 0.5 2" range="-0.0025 0.0025" frictionloss="0" axis="0 0 1" type="hinge" damping="0" armature="0" />
         <geom class="visual" pos="0 0 0.02" quat="1 0 0 0" material="pla_cf_structure" mesh="crank" />
         <geom class="visual" pos="0 0 -0.02905" quat="1 0 0 0" material="anodized_black" mesh="motor" />
         <body name="rod_bearing_shim_subassembly" pos="-0.0176777 -0.0176777 0.0306" quat="0 1 -1.3829e-07 0">
@@ -141,7 +141,7 @@
       </body>
       <body name="left_finger" pos="-0.075 0 0.08405" quat="0.5 0.5 0.5 0.5">
         <inertial pos="-0.00034517389 0.01908037 0.015312358" mass="0.054931748" fullinertia="2.6449963e-05 7.4293339e-06 2.6124026e-05 -3.909154e-07 -1.8589738e-08 -2.1530338e-06" />
-        <joint name="left_finger_slide" type="slide" solreflimit="-30000 -600" solimplimit="0.99 0.999 0.0001 0.5 2" range="0 0.03755325436826421" damping="0.01" axis="0 0 1" frictionloss="0.1" armature="0" />
+        <joint name="left_finger_slide" type="slide" solreflimit="0.002 1" solimplimit="0.99 0.999 0.0001 0.5 2" range="0 0.03755325436826421" damping="0.01" axis="0 0 1" frictionloss="0.1" armature="0" />
         <geom class="visual" pos="0 -0.0065 0" quat="0.707107 -0.707107 0 0" material="steel" mesh="mgn9_block" />
         <geom class="visual" pos="0 0.0035 0.01445" quat="0.5 -0.5 -0.5 -0.5" material="pla_finger" mesh="finger_body" />
         <geom class="visual" pos="0 0.0035 0.01445" quat="0.5 -0.5 -0.5 -0.5" material="pla_cf_structure" mesh="finger_mount" />
@@ -190,7 +190,7 @@
       </body>
       <body name="right_finger" pos="0.075 0 0.08405" quat="0.5 -0.5 -0.5 0.5">
         <inertial pos="0.00034517389 -0.01908037 0.015312358" mass="0.054931748" fullinertia="2.6449963e-05 7.4293339e-06 2.6124026e-05 -3.909154e-07 1.8589741e-08 2.1530336e-06" />
-        <joint name="right_finger_slide" type="slide" solreflimit="-30000 -600" solimplimit="0.99 0.999 0.0001 0.5 2" range="0 0.03755325436826421" damping="0.01" axis="0 0 1" frictionloss="0.1" armature="0" />
+        <joint name="right_finger_slide" type="slide" solreflimit="0.002 1" solimplimit="0.99 0.999 0.0001 0.5 2" range="0 0.03755325436826421" damping="0.01" axis="0 0 1" frictionloss="0.1" armature="0" />
         <geom class="visual" pos="0 0.0065 0.0289" quat="0.707107 0.707107 0 0" material="steel" mesh="mgn9_block" />
         <geom class="visual" pos="0 -0.0035 0.01445" quat="0.5 0.5 -0.5 0.5" material="pla_finger" mesh="finger_body" />
         <geom class="visual" pos="0 -0.0035 0.01445" quat="0.5 0.5 -0.5 0.5" material="pla_cf_structure" mesh="finger_mount" />

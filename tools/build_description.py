@@ -513,13 +513,38 @@ def _add_bounding_box(
 
 
 def _build_appearance_library(raw_root: ET.Element, out_root: Path) -> dict:
-    """按原始视觉几何实际引用的材质采集 CAD 色，保留平垫的设计色。"""
+    """按原始视觉几何实际引用的材质采集 CAD 色，合并内置默认映射并保留用户扩展。"""
+    bundled = read_appearance(ROOT / "config" / "appearance.yaml")
     path = out_root / "config" / "appearance.yaml"
-    library = read_appearance(path if path.is_file() else ROOT / "config" / "appearance.yaml")
+    if path.is_file():
+        existing = read_appearance(path)
+        presets = {}
+        for name in dict.fromkeys([*bundled["presets"], *existing.get("presets", ())]):
+            base_preset = bundled["presets"].get(name, {})
+            user_preset = existing.get("presets", {}).get(name, {})
+            merged_preset = {**base_preset, **user_preset}
+            if "mesh_rgba" in base_preset or "mesh_rgba" in user_preset:
+                merged_preset["mesh_rgba"] = {
+                    **base_preset.get("mesh_rgba", {}),
+                    **user_preset.get("mesh_rgba", {}),
+                }
+            presets[name] = merged_preset
+        library = {
+            **bundled,
+            **existing,
+            "materials": {**bundled["materials"], **existing.get("materials", {})},
+            "mesh_classes": {**bundled["mesh_classes"], **existing.get("mesh_classes", {})},
+            "smooth_meshes": list(
+                dict.fromkeys([*bundled["smooth_meshes"], *existing.get("smooth_meshes", ())])
+            ),
+            "presets": presets,
+        }
+    else:
+        library = bundled
     raw_colors = {
         mat.attrib["name"]: mat.attrib["rgba"] for mat in raw_root.findall("asset/material")
     }
-    colors = {"pad_visual": library["presets"]["cad"]["mesh_rgba"]["pad_visual"]}
+    colors: dict[str, list[float]] = {}
     for geom in raw_root.findall(".//worldbody//geom[@class='visual']"):
         mesh = MESH_NAME_MAP[geom.attrib["mesh"]]
         if mesh not in library["mesh_classes"]:

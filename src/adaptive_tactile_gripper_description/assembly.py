@@ -111,7 +111,10 @@ def get_tactile_layout(
 ) -> dict[str, dict[str, Any] | None]:
     """按侧返回触觉阵列及 MJCF geom/site 名称，无触觉的一侧返回 None。
 
-    prefix 可传入挂载前缀，例如 `gripper/`。各球心以 sensor_mount 表达。
+    `prefix` 可传入挂载前缀（如 `gripper/`），各测点位置以 `sensor_mount` 表达：
+    - `mode == "contact_geom"`（如 `pts_2_0`）：每个 `taxels` 元素含独立碰撞体 `geom_name` 与 `site_name`；
+    - `mode == "pad_sites"`（如 `paxini_m2824`）：整块平垫共用顶层 `pad_geom_name`（显式 `<pair>` 仅可对该
+      `pad_geom_name` 注册一次，切勿按测点重复注册），每个 `taxels` 元素含测点 `id`、`pos_m` 与 `site_name`。
     """
     layout = {}
     for side, name in (("left", left_sensor), ("right", right_sensor)):
@@ -126,7 +129,6 @@ def get_tactile_layout(
             taxels = [
                 {
                     **taxel,
-                    "geom_name": pad_geom,
                     "site_name": f"{site_prefix}{taxel['id']:03d}",
                 }
                 for taxel in sensor["taxels_in_sensor_mount"]

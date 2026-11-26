@@ -586,7 +586,7 @@ def test_traceable_payload_and_tactile_layout():
     assert paxini_layout["left"]["mode"] == "pad_sites"
     assert paxini_layout["left"]["count"] == 135
     assert paxini_layout["left"]["pad_geom_name"] == "gripper/left_pad_collision"
-    assert paxini_layout["left"]["taxels"][0]["geom_name"] == "gripper/left_pad_collision"
+    assert all("geom_name" not in taxel for taxel in paxini_layout["left"]["taxels"])
     assert paxini_layout["left"]["taxels"][0]["site_name"] == "gripper/left_taxel_001"
     assert paxini_layout["left"]["taxels"][-1]["site_name"] == "gripper/left_taxel_135"
     assert get_closure_jacobian(0.0) == pytest.approx(0.035355339059)

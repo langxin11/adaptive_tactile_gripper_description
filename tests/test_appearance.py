@@ -221,6 +221,9 @@ def test_extended_module_preserves_colors(tmp_path, monkeypatch):
     path = tmp_path / "config/appearance.yaml"
     path.parent.mkdir()
     library = _library()
+    for legacy_key in ("paxini_m2824", "paxini_m2824_adapter"):
+        library["mesh_classes"].pop(legacy_key, None)
+        library["presets"]["cad"]["mesh_rgba"].pop(legacy_key, None)
     library["mesh_classes"]["custom"] = "pts_housing"
     cad = [0.1, 0.2, 0.9, 1]
     library["presets"]["cad"]["mesh_rgba"]["custom"] = cad
@@ -240,7 +243,14 @@ def test_extended_module_preserves_colors(tmp_path, monkeypatch):
             [sys.executable, str(root / "tools/build_description.py"), "--out-root", str(tmp_path)],
             check=True,
         )
-        assert yaml.safe_load(path.read_text())["presets"]["cad"]["mesh_rgba"]["custom"] == cad
+        saved = yaml.safe_load(path.read_text())
+        assert saved["presets"]["cad"]["mesh_rgba"]["custom"] == cad
+        for builtin_key in ("paxini_m2824", "paxini_m2824_adapter"):
+            assert builtin_key in saved["mesh_classes"]
+            assert builtin_key in saved["presets"]["cad"]["mesh_rgba"]
+        assert (
+            build_gripper_spec(left_sensor="paxini_m2824", appearance="cad").compile() is not None
+        )
         for preset, expected in (
             ("realistic", library["materials"]["pts_housing"]["rgba"]),
             ("cad", cad),

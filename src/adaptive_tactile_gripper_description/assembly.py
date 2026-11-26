@@ -120,8 +120,26 @@ def get_tactile_layout(
         if sensor is None or tactile is None:
             layout[side] = None
             continue
-        geom_prefix = prefix + tactile[f"{side}_prefix"]
         site_prefix = prefix + tactile[f"{side}_site_prefix"]
+        if tactile["mode"] == "pad_sites":
+            pad_geom = prefix + tactile[f"{side}_pad_geom"]
+            taxels = [
+                {
+                    **taxel,
+                    "geom_name": pad_geom,
+                    "site_name": f"{site_prefix}{taxel['id']:03d}",
+                }
+                for taxel in sensor["taxels_in_sensor_mount"]
+            ]
+            layout[side] = {
+                "mode": "pad_sites",
+                "count": tactile["count"],
+                "pad_geom_name": pad_geom,
+                "site_quat_in_sensor_mount_wxyz": tactile["site_quat_in_sensor_mount_wxyz"],
+                "taxels": taxels,
+            }
+            continue
+        geom_prefix = prefix + tactile[f"{side}_prefix"]
         taxels = []
         for taxel in sensor["taxels_in_sensor_mount"]:
             index = f"{taxel['row']}{taxel['col']}"
@@ -238,7 +256,7 @@ def build_gripper_spec(
     """按参数模块化组装夹爪 MuJoCo MjSpec。
 
     参数
-        left_sensor: 左指传感器模组名（如 ``pts_2_0``、``flat_pad``），``None`` 或 ``"none"`` 不挂传感器。
+        left_sensor: 左指传感器模组名（如 ``pts_2_0``、``flat_pad``、``paxini_m2824``），``None`` 或 ``"none"`` 不挂传感器。
         right_sensor: 右指传感器模组名，语义同 ``left_sensor``。
         appearance: 外观预设名；省略时沿用资产自带的材质。
         with_camera: 是否挂载侧置 RealSense D435i 支架与相机。

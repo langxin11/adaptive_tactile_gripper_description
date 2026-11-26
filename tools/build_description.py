@@ -52,10 +52,12 @@ from adaptive_tactile_gripper_description.kinematics import (
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_EXPORT_DIR = ROOT / "tools" / "onshape_export"
+DEFAULT_PAXINI_EXPORT_DIR = ROOT / "tools" / "paxini_export"
 PACKAGE_NAME = "adaptive_tactile_gripper_description"
 
 FULL_OPEN_MOUNT_GAP_M = 0.0795
 TIP_PROTRUSION_M = 0.0066
+PAXINI_M2824_TIP_PROTRUSION_M = 0.0037
 SRDF_CLOSE_M = 0.032
 
 # 原始网格名 -> 仓库规范 ASCII 小写网格名（不含 .stl 后缀）
@@ -116,6 +118,8 @@ DM4310P_ROTOR_OUTPUT_MASS_KG = 0.0480
 # Contactile PTS 2.0 单只 3x3 传感头（中空铝壳 + Shore-A40 硅胶膜柱 + 内置相机/LED PCB）
 PTS_2_0_MASS_KG = 0.0150
 FLAT_PAD_MASS_KG = 0.0100
+# PaXini PX6AX-GEN4-GR-M2824-Gripper 裸传感器 (8.5 g) + 6x M1.6x4 不锈钢螺钉 (0.32 g)
+PAXINI_M2824_SENSOR_MASS_KG = 0.00882
 
 # Intel RealSense D435i 官方裸机 72.0 g + 支架五金 (2x M4x8 + 2x M4x16 + 2x M4螺母 + 1/4-20螺钉)
 D435I_BARE_MASS_KG = 0.0720
@@ -420,6 +424,17 @@ def _copy_and_rename_meshes(
     return referenced
 
 
+def _copy_paxini_meshes(paxini_export_dir: Path, out_meshes_dir: Path) -> None:
+    """将 PaXini M2824 传感器与转接垫块 STL 复制到 meshes/paxini_m2824/ 子目录。"""
+    sub_dir = out_meshes_dir / "paxini_m2824"
+    sub_dir.mkdir(parents=True, exist_ok=True)
+    for fname in ("paxini_m2824.stl", "paxini_m2824_adapter.stl"):
+        src = paxini_export_dir / fname
+        if not src.is_file():
+            raise FileNotFoundError(f"缺少 PaXini 导出网格文件: {src}")
+        shutil.copy2(src, sub_dir / fname)
+
+
 def _rename_mesh_refs(elem: ET.Element) -> None:
     """将元素树内的旧网格名称映射为纯 ASCII 规范名。"""
     for node in elem.iter():
@@ -533,12 +548,15 @@ def _build_appearance_library(raw_root: ET.Element, out_root: Path) -> dict:
     return library
 
 
-def _add_visual_assets(root: ET.Element, appearance: Appearance) -> None:
+def _add_visual_assets(
+    root: ET.Element, appearance: Appearance, mesh_files: dict[str, str] | None = None
+) -> None:
     """为模组添加所引用的网格、曲面法线和语义材质。"""
     asset = ET.SubElement(root, "asset")
     meshes = {geom.attrib["mesh"] for geom in root.findall(".//worldbody//geom[@mesh]")}
     for mesh in sorted(meshes):
-        element = ET.SubElement(asset, "mesh", name=mesh, file=f"{mesh}.stl")
+        file_rel = (mesh_files or {}).get(mesh, f"{mesh}.stl")
+        element = ET.SubElement(asset, "mesh", name=mesh, file=file_rel)
         if mesh in appearance.smooth_meshes:
             element.set("smoothnormal", "true")
     # 内置模组在生成时显式标记视觉几何，按配置原始精度写入交付 XML。
@@ -789,6 +807,143 @@ def _build_flat_pad_mjcf(appearance: Appearance, out_path: Path) -> None:
     )
     _add_visual_assets(root, appearance)
     _write_xml(root, out_path)
+
+
+def _build_paxini_m2824_mjcf(
+    appearance: Appearance,
+    meshes_dir: Path,
+    rho_placf: float,
+    taxels_raw: list[dict[str, object]],
+    out_path: Path,
+) -> float:
+    """生成 PaXini PX6AX-GEN4-GR-M2824-Gripper（含转接垫块、纯盒式碰撞与 135 测点 site）MJCF。"""
+    root = ET.Element("mujoco", {"model": "paxini_m2824"})
+    ET.SubElement(
+        root, "compiler", {"angle": "radian", "meshdir": "../../meshes", "autolimits": "true"}
+    )
+    root.append(_build_default_section(for_chassis=False))
+    worldbody = ET.SubElement(root, "worldbody")
+    body = ET.SubElement(
+        worldbody,
+        "body",
+        {
+            "name": "sensor_body",
+            "pos": "0 0 0",
+            "quat": "1 0 0 0",
+            "childclass": "parallel_gripper",
+        },
+    )
+
+    adapter_stl = meshes_dir / "paxini_m2824" / "paxini_m2824_adapter.stl"
+    sensor_stl = meshes_dir / "paxini_m2824" / "paxini_m2824.stl"
+    adapter_part = _part_from_mesh(
+        "paxini_m2824_adapter",
+        adapter_stl,
+        [0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0, 0.0],
+        density_kg_m3=rho_placf,
+    )
+    m_s = PAXINI_M2824_SENSOR_MASS_KG
+    sx, sy, sz = 0.028752, 0.024021, 0.0060025
+    sensor_part = _point_part(
+        "paxini_m2824_sensor",
+        m_s,
+        [-6.8e-05, 0.0, 0.00069875],
+        [
+            m_s * (sy**2 + sz**2) / 12.0,
+            m_s * (sx**2 + sz**2) / 12.0,
+            m_s * (sx**2 + sy**2) / 12.0,
+        ],
+    )
+    total_mass, com, I_mat = _combine_inertials([adapter_part, sensor_part])
+    _set_inertial_element(body, total_mass, com, I_mat)
+
+    for mesh_name in ("paxini_m2824_adapter", "paxini_m2824"):
+        ET.SubElement(
+            body,
+            "geom",
+            {
+                "type": "mesh",
+                "class": "visual",
+                "pos": "0 0 0",
+                "quat": "1 0 0 0",
+                "mesh": mesh_name,
+            },
+        )
+
+    housing_pos = [-0.00205, 0.0, -0.004051]
+    housing_size = [0.01236, 0.012013, 0.001751]
+    housing = _add_collision_box(body, "sensor_housing_collision", housing_pos, housing_size)
+    housing.set("contype", "4")
+    housing.set("conaffinity", "1")
+
+    pad_pos = [-6.8e-05, 0.0, 0.00069875]
+    pad_size = [0.014378, 0.012013, 0.00300125]
+    ET.SubElement(
+        body,
+        "geom",
+        {
+            "name": "pad_collision",
+            "type": "box",
+            "class": "pillar_collision",
+            "pos": _fmt_vec(pad_pos),
+            "size": _fmt_vec(pad_size),
+        },
+    )
+
+    for stl_path in (adapter_stl, sensor_stl):
+        verts = _stl_triangles(stl_path).reshape(-1, 3)
+        c_h, s_h = np.asarray(housing_pos), np.asarray(housing_size)
+        c_p, s_p = np.asarray(pad_pos), np.asarray(pad_size)
+        covered = np.all(np.abs(verts - c_h) <= s_h + 1e-8, axis=1) | np.all(
+            np.abs(verts - c_p) <= s_p + 1e-8, axis=1
+        )
+        if not bool(covered.all()):
+            raise ValueError(f"{stl_path.name} 存在超出碰撞盒包络的顶点")
+
+    ET.SubElement(
+        body,
+        "site",
+        {
+            "group": "3",
+            "name": "pad_center",
+            "pos": _fmt_vec([0, 0, PAXINI_M2824_TIP_PROTRUSION_M]),
+            "quat": "0 1 0 0",
+        },
+    )
+    for item in taxels_raw:
+        tid = int(item["id"])  # type: ignore[arg-type]
+        pos_m = [float(v) for v in item["pos_m"]]  # type: ignore[attr-defined]
+        ET.SubElement(
+            body,
+            "site",
+            {
+                "group": "3",
+                "name": f"taxel_{tid:03d}",
+                "pos": _fmt_vec(pos_m),
+                "quat": "0 1 0 0",
+            },
+        )
+    ET.SubElement(
+        body,
+        "site",
+        {
+            "name": "fingertip",
+            "group": "4",
+            "pos": _fmt_vec([0, 0, PAXINI_M2824_TIP_PROTRUSION_M]),
+        },
+    )
+
+    _add_visual_assets(
+        root,
+        appearance,
+        {
+            "paxini_m2824": "paxini_m2824/paxini_m2824.stl",
+            "paxini_m2824_adapter": "paxini_m2824/paxini_m2824_adapter.stl",
+        },
+    )
+    _write_xml(root, out_path)
+    return total_mass
 
 
 def _compute_d435i_frames(
@@ -1476,6 +1631,7 @@ def _build_urdf_xacros(
     chassis_xml: Path,
     pts_xml: Path,
     flat_xml: Path,
+    paxini_xml: Path,
     camera_xml: Path,
     urdf_dir: Path,
     srdf_dir: Path,
@@ -1608,7 +1764,7 @@ def _build_urdf_xacros(
 """
     xml_end = "  </xacro:macro>\n</robot>\n"
 
-    for name, path in (("pts_2_0", pts_xml), ("flat_pad", flat_xml)):
+    for name, path in (("pts_2_0", pts_xml), ("flat_pad", flat_xml), ("paxini_m2824", paxini_xml)):
         root = ET.parse(path).getroot()
         body = root.find("worldbody/body")
         body_pose = pose(body)
@@ -1765,6 +1921,7 @@ def _build_urdf_xacros(
   <xacro:include filename="$(find {PACKAGE_NAME})/urdf/gripper_chassis.xacro"/>
   <xacro:include filename="$(find {PACKAGE_NAME})/urdf/sensors/pts_2_0.xacro"/>
   <xacro:include filename="$(find {PACKAGE_NAME})/urdf/sensors/flat_pad.xacro"/>
+  <xacro:include filename="$(find {PACKAGE_NAME})/urdf/sensors/paxini_m2824.xacro"/>
   <xacro:include filename="$(find {PACKAGE_NAME})/urdf/accessories/realsense_d435i.xacro"/>
 
   <!-- 顶层可配置夹爪宏：支持左右传感器独立替换与相机可选挂载 -->
@@ -1782,12 +1939,18 @@ def _build_urdf_xacros(
     <xacro:if value="${{left_sensor == 'flat_pad'}}">
       <xacro:flat_pad_sensor prefix="${{ns}}_left" parent="${{ns}}_left_sensor_mount" safety_distance="${{safety_distance}}"/>
     </xacro:if>
+    <xacro:if value="${{left_sensor == 'paxini_m2824'}}">
+      <xacro:paxini_m2824_sensor prefix="${{ns}}_left" parent="${{ns}}_left_sensor_mount" safety_distance="${{safety_distance}}"/>
+    </xacro:if>
 
     <xacro:if value="${{right_sensor == 'pts_2_0'}}">
       <xacro:pts_2_0_sensor prefix="${{ns}}_right" parent="${{ns}}_right_sensor_mount" safety_distance="${{safety_distance}}"/>
     </xacro:if>
     <xacro:if value="${{right_sensor == 'flat_pad'}}">
       <xacro:flat_pad_sensor prefix="${{ns}}_right" parent="${{ns}}_right_sensor_mount" safety_distance="${{safety_distance}}"/>
+    </xacro:if>
+    <xacro:if value="${{right_sensor == 'paxini_m2824'}}">
+      <xacro:paxini_m2824_sensor prefix="${{ns}}_right" parent="${{ns}}_right_sensor_mount" safety_distance="${{safety_distance}}"/>
     </xacro:if>
 
     <xacro:if value="${{with_camera}}">
@@ -1846,7 +2009,7 @@ def _build_urdf_xacros(
         chassis_links, "link"
     )
     for side in ("left", "right"):
-        srdf_xacro += f"""      <xacro:if value="${{{side}_sensor in ('pts_2_0', 'flat_pad')}}">
+        srdf_xacro += f"""      <xacro:if value="${{{side}_sensor in ('pts_2_0', 'flat_pad', 'paxini_m2824')}}">
 """
         srdf_xacro += group_members([f"{side}_sensor_joint", f"{side}_fingertip_joint"], "joint", 8)
         srdf_xacro += group_members([f"{side}_sensor_link", f"{side}_fingertip"], "link", 8)
@@ -1909,11 +2072,11 @@ def _build_urdf_xacros(
       <disable_collisions link1="${ns}_camera_mount_link" link2="${ns}_right_finger" reason="Never"/>
     </xacro:if>
 
-    <xacro:if value="${left_sensor in ('pts_2_0', 'flat_pad')}">
+    <xacro:if value="${left_sensor in ('pts_2_0', 'flat_pad', 'paxini_m2824')}">
       <disable_collisions link1="${ns}_left_finger" link2="${ns}_left_sensor_link" reason="Adjacent"/>
       <disable_collisions link1="${ns}_base" link2="${ns}_left_sensor_link" reason="Adjacent"/>
     </xacro:if>
-    <xacro:if value="${right_sensor in ('pts_2_0', 'flat_pad')}">
+    <xacro:if value="${right_sensor in ('pts_2_0', 'flat_pad', 'paxini_m2824')}">
       <disable_collisions link1="${ns}_right_finger" link2="${ns}_right_sensor_link" reason="Adjacent"/>
       <disable_collisions link1="${ns}_base" link2="${ns}_right_sensor_link" reason="Adjacent"/>
     </xacro:if>
@@ -1944,6 +2107,8 @@ def _read_export_microversion(export_dir: Path) -> str:
 
 def _write_specs(
     taxels_spec: list[dict[str, object]],
+    paxini_mass_kg: float,
+    paxini_taxels: list[dict[str, object]],
     phi_print: float,
     rho_pla: float,
     rho_placf: float,
@@ -2002,7 +2167,7 @@ kinematics:
   total_stroke_m: {TOTAL_STROKE_M:.16f}
 
   module_contact:
-    # 两侧各装一个 PTS 2.0 或平垫时，名义首次接触由 6.6 mm 单侧突出量决定。
+    # 两侧各装一个 PTS 2.0 或平垫时，名义首次接触由 6.6 mm 单侧突出量决定；其余组合由 get_stroke_limits 计算。
     applicable_modules: [pts_2_0, flat_pad]
     first_contact_q_rad: {first_contact_q:.12f}
     no_contact_range_rad: [0.0, {first_contact_q:.12f}]
@@ -2134,8 +2299,47 @@ contact:
 """
     (config_dir / "sensors" / "flat_pad.yaml").write_text(flat_yaml, encoding="utf-8")
 
+    paxini_mesh_hashes = "\n".join(
+        f'  {path.name}: "{hashlib.sha256(path.read_bytes()).hexdigest()}"'
+        for path in sorted((meshes_dir / "paxini_m2824").glob("*.stl"))
+    )
+    paxini_lines = [
+        "# PaXini PX6AX-GEN4-GR-M2824-Gripper 135 测点夹爪触觉模组规格（含 3.5 mm 转接垫块，盒式平面碰撞）",
+        "name: paxini_m2824",
+        "model: PX6AX-GEN4-GR-M2824-Gripper",
+        "kind: tactile_3axis_pad",
+        f"mass_kg: {round(paxini_mass_kg, 6)}",
+        "# 前接触面沿安装系 +Z（含 3.5 mm 转接垫块对齐至 3.7 mm）；双侧首次接触角由 get_stroke_limits 计算。",
+        f"thickness_to_tip_m: {PAXINI_M2824_TIP_PROTRUSION_M}",
+        "mesh_sha256:",
+        paxini_mesh_hashes,
+        "tactile:",
+        "  mode: pad_sites",
+        f"  count: {len(paxini_taxels)}",
+        "  left_pad_geom: left_pad_collision",
+        "  right_pad_geom: right_pad_collision",
+        "  left_site_prefix: left_taxel_",
+        "  right_site_prefix: right_taxel_",
+        "  site_quat_in_sensor_mount_wxyz: [0, 1, 0, 0]",
+        "contact:",
+        "  friction_coefficient: 0.8",
+        "  solref: [-1200.0, -10.0]",
+        "  solimp: [0.75, 0.95, 0.0025, 0.5, 2.0]",
+        "taxels_in_sensor_mount:",
+    ]
+    for item in paxini_taxels:
+        paxini_lines.append(f"  - {{id: {item['id']}, pos_m: {item['pos_m']}}}")
+    (config_dir / "sensors" / "paxini_m2824.yaml").write_text(
+        "\n".join(paxini_lines) + "\n", encoding="utf-8"
+    )
 
-def build_all(export_dir: Path, out_root: Path, appearance: str = "realistic") -> None:
+
+def build_all(
+    export_dir: Path,
+    out_root: Path,
+    appearance: str = "realistic",
+    paxini_export_dir: Path = DEFAULT_PAXINI_EXPORT_DIR,
+) -> None:
     """从 Onshape 导出结果构建完整模块化夹爪描述资产。"""
     raw_xml = export_dir / "raw_gripper.xml"
     raw_assets = export_dir / "assets"
@@ -2147,6 +2351,8 @@ def build_all(export_dir: Path, out_root: Path, appearance: str = "realistic") -
     meshes_dir = out_root / "meshes"
     palette = Appearance.from_library(_build_appearance_library(raw_root, out_root), appearance)
     _copy_and_rename_meshes(raw_root, raw_assets, meshes_dir)
+    _copy_paxini_meshes(paxini_export_dir, meshes_dir)
+    paxini_taxels = json.loads((paxini_export_dir / "taxels.json").read_text(encoding="utf-8"))
 
     phi_print, rho_pla, rho_placf = _solve_print_fill_ratio(raw_root, meshes_dir)
 
@@ -2154,6 +2360,7 @@ def build_all(export_dir: Path, out_root: Path, appearance: str = "realistic") -
     chassis_path = mjcf_dir / "gripper_chassis.xml"
     pts_path = mjcf_dir / "sensors" / "pts_2_0.xml"
     flat_path = mjcf_dir / "sensors" / "flat_pad.xml"
+    paxini_path = mjcf_dir / "sensors" / "paxini_m2824.xml"
     cam_path = mjcf_dir / "accessories" / "realsense_d435i.xml"
 
     chassis_masses = _build_chassis_mjcf(
@@ -2161,6 +2368,9 @@ def build_all(export_dir: Path, out_root: Path, appearance: str = "realistic") -
     )
     taxels_spec = _build_pts_2_0_mjcf(raw_root, palette, meshes_dir, pts_path)
     _build_flat_pad_mjcf(palette, flat_path)
+    paxini_mass_kg = _build_paxini_m2824_mjcf(
+        palette, meshes_dir, rho_placf, paxini_taxels, paxini_path
+    )
     cam_info = _build_realsense_d435i_mjcf(raw_root, palette, meshes_dir, rho_placf, cam_path)
 
     full_xml = mjcf_dir / "gripper.xml"
@@ -2174,10 +2384,18 @@ def build_all(export_dir: Path, out_root: Path, appearance: str = "realistic") -
     payload_with_cam_mid = _compute_composite_payload_in_base(full_xml, 0.75)
 
     _build_urdf_xacros(
-        chassis_path, pts_path, flat_path, cam_path, out_root / "urdf", out_root / "srdf"
+        chassis_path,
+        pts_path,
+        flat_path,
+        paxini_path,
+        cam_path,
+        out_root / "urdf",
+        out_root / "srdf",
     )
     _write_specs(
         taxels_spec,
+        paxini_mass_kg,
+        paxini_taxels,
         phi_print,
         rho_pla,
         rho_placf,
@@ -2212,12 +2430,13 @@ def _validate_module_appearances(mjcf_dir: Path, palette: Appearance) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="构建模块化夹爪描述仓库资产。")
     parser.add_argument("--export-dir", type=Path, default=DEFAULT_EXPORT_DIR)
+    parser.add_argument("--paxini-export-dir", type=Path, default=DEFAULT_PAXINI_EXPORT_DIR)
     parser.add_argument("--out-root", type=Path, default=ROOT)
     parser.add_argument(
         "--appearance", choices=("realistic", "cad"), default="realistic", help="生成资产的外观预设"
     )
     args = parser.parse_args()
-    build_all(args.export_dir, args.out_root, args.appearance)
+    build_all(args.export_dir, args.out_root, args.appearance, args.paxini_export_dir)
     print(f"已完成模块化资产构建：{args.out_root}")
     return 0
 

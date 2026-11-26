@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:macro name="paxini_m2824_sensor" params="prefix parent safety_distance:=0.0">
+    <joint name="${prefix}_sensor_joint" type="fixed">
+      <parent link="${parent}"/>
+      <child link="${prefix}_sensor_link"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+    <link name="${prefix}_sensor_link">
+      <inertial>
+        <origin xyz="-0.00043588259 0 -0.00018290832" rpy="0 0 0"/>
+        <mass value="0.010830216"/>
+        <inertia ixx="5.8605994e-07" iyy="7.8170843e-07" izz="1.2368317e-06" ixy="0" ixz="-1.5412479e-08" iyz="0"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/paxini_m2824/paxini_m2824_adapter.stl"/></geometry>
+        <material name="${prefix}_pla_cf_structure"><color rgba="0.14117647 0.26666667 0.62352941 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/paxini_m2824/paxini_m2824.stl"/></geometry>
+        <material name="${prefix}_rubber_pad"><color rgba="0.20392157 0.21568627 0.23137255 1"/></material>
+      </visual>
+      <collision name="${prefix}_sensor_housing_collision">
+        <origin xyz="-0.00205 0 ${-0.004051 + (-0.5) * safety_distance}" rpy="0 0 0"/>
+        <geometry><box size="${0.02472 + 2 * safety_distance} ${0.024026 + 2 * safety_distance} ${0.003502 + 1 * safety_distance}"/></geometry>
+      </collision>
+      <collision name="${prefix}_pad_collision">
+        <origin xyz="-6.8e-05 0 0.00069875" rpy="0 0 0"/>
+        <geometry><box size="0.028756 0.024026 0.0060025"/></geometry>
+      </collision>
+    </link>
+    <joint name="${prefix}_fingertip_joint" type="fixed">
+      <parent link="${prefix}_sensor_link"/>
+      <child link="${prefix}_fingertip"/>
+      <origin xyz="0 0 0.0037" rpy="0 0 0"/>
+    </joint>
+    <link name="${prefix}_fingertip"/>
+  </xacro:macro>
+</robot>

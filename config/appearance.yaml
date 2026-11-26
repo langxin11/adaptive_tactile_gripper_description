@@ -71,6 +71,8 @@ mesh_classes:
   pillars_8: silicone
   d435i_solid: aluminum
   pad_visual: rubber_pad
+  paxini_m2824: rubber_pad
+  paxini_m2824_adapter: pla_cf_structure
 smooth_meshes: [bearing_8x4x2, bearing_8x4x2_2, bearing_8x4x2_3, bearing_8x4x2_4,
   stator, motor, pillars_0, pillars_1, pillars_2, pillars_3, pillars_4, pillars_5,
   pillars_6, pillars_7, pillars_8, d435i_solid]
@@ -101,6 +103,8 @@ presets:
       motor: [0.647059, 0.647059, 0.647059, 1.0]
       motor_mount: [0.615686, 0.811765, 0.929412, 1.0]
       pad_visual: [0.25, 0.27, 0.3, 1]
+      paxini_m2824: [0.22, 0.24, 0.27, 1.0]
+      paxini_m2824_adapter: [0.615686, 0.811765, 0.929412, 1.0]
       pillars_0: [1.0, 0.0, 1.0, 1.0]
       pillars_1: [1.0, 0.0, 1.0, 1.0]
       pillars_2: [1.0, 0.0, 1.0, 1.0]

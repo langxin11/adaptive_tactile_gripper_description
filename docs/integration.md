@@ -74,7 +74,7 @@ xacro "$(ros2 pkg prefix adaptive_tactile_gripper_description)/share/adaptive_ta
 
 `panda_gripper_motion` 是单自由度规划组，完整的 `panda_gripper` 组包含被动连杆、指尖和安装帧，可用于末端定义与状态显示。URDF 以开链表达刚体，三个被动转动关节依赖上述闭环状态同步。执行侧用滑块位移或电机角控制机构，并将各被动关节状态由闭环关系重算。
 
-电机协议角度是 `[0, 1.7] rad`。机构有效曲柄角到 `π/2 rad` 时单指闭合 35.355 mm。双侧均装 `pts_2_0` 或 `flat_pad`（含混装）时，名义首次接触提前至 **1.450404 rad、33.15 mm**。用 `get_stroke_limits(left_sensor, right_sensor)` 获取对应配置的无接触上界。SRDF 的 `close` 单指闭合 32 mm，对置接触面净距 2.3 mm。该净距在 `safety_distance=0.02` 时保持一致，因为余量只加到外部避障包络，指背及 PTS 壳体沿闭合轴仅向后扩展。两侧传感器之间始终参与碰撞检查。
+电机协议与机构有效曲柄角范围均为 `[0, 1.7] rad`，曲柄到 `1.7 rad`（约 97.4°）时单指闭合 37.553 mm（离曲柄轴套与对侧滑块碰撞极限仍有 1.75 mm 安全余量）。双侧均装 `pts_2_0` 或 `flat_pad`（含混装）时，名义首次接触提前至 **1.450404 rad、33.15 mm**；双侧装 `paxini_m2824`（3.5 mm 转接垫块）时，名义首次接触为 **1.610581 rad、36.05 mm**。用 `get_stroke_limits(left_sensor, right_sensor)` 获取任意组合的无接触上界。SRDF 的 `close` 单指闭合 32 mm（双 PTS/平垫对置净距 2.3 mm，双 `paxini_m2824` 对置净距 8.1 mm）。该净距在 `safety_distance=0.02` 时保持一致，因为余量只加到外部避障包络，指背及传感器壳体/转接座沿闭合轴仅向后扩展。两侧传感器之间始终参与碰撞检查。
 
 ### 1.4 Franka Desk 负载核对
 
@@ -161,6 +161,8 @@ layout = get_tactile_layout("pts_2_0", "flat_pad", prefix="gripper/")
 - **`+Z` 轴**：垂直指腹指向被抓物体方向（即传感器向外突出方向）；
 - **`+X` 轴**：沿指尖远端向上（对应夹爪坐标系 `+Z`）；
 - **`+Y` 轴**：由右手定则 `Z × X` 确定。
+
+- **`paxini_m2824`（内置模块）**：PaXini `PX6AX-GEN4-GR-M2824-Gripper`（28.75 × 24.02 × 6.0 mm）配 3.5 mm 转接垫块，前接触面位于 `thickness_to_tip_m: 0.0037`（双侧全开净开口 72.1 mm，首次接触 1.610581 rad，距 1.7 rad 上限保留 1.50 mm/指压入余量）；MJCF/URDF 采用纯盒式碰撞（`pad_collision` + `sensor_housing_collision`，不使用接触球），并在 `pad_sites` 模式下暴露 135 个测点坐标帧（`taxel_001`–`taxel_135`）。
 
 ### 新增模组 3 步清单
 

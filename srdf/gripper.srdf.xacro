@@ -23,13 +23,13 @@
       <link name="${ns}_right_sensor_mount"/>
       <link name="${ns}_camera_mount_frame"/>
       <link name="${ns}_tcp"/>
-      <xacro:if value="${left_sensor in ('pts_2_0', 'flat_pad')}">
+      <xacro:if value="${left_sensor in ('pts_2_0', 'flat_pad', 'paxini_m2824')}">
         <joint name="${ns}_left_sensor_joint"/>
         <joint name="${ns}_left_fingertip_joint"/>
         <link name="${ns}_left_sensor_link"/>
         <link name="${ns}_left_fingertip"/>
       </xacro:if>
-      <xacro:if value="${right_sensor in ('pts_2_0', 'flat_pad')}">
+      <xacro:if value="${right_sensor in ('pts_2_0', 'flat_pad', 'paxini_m2824')}">
         <joint name="${ns}_right_sensor_joint"/>
         <joint name="${ns}_right_fingertip_joint"/>
         <link name="${ns}_right_sensor_link"/>
@@ -116,11 +116,11 @@
       <disable_collisions link1="${ns}_camera_mount_link" link2="${ns}_right_finger" reason="Never"/>
     </xacro:if>
 
-    <xacro:if value="${left_sensor in ('pts_2_0', 'flat_pad')}">
+    <xacro:if value="${left_sensor in ('pts_2_0', 'flat_pad', 'paxini_m2824')}">
       <disable_collisions link1="${ns}_left_finger" link2="${ns}_left_sensor_link" reason="Adjacent"/>
       <disable_collisions link1="${ns}_base" link2="${ns}_left_sensor_link" reason="Adjacent"/>
     </xacro:if>
-    <xacro:if value="${right_sensor in ('pts_2_0', 'flat_pad')}">
+    <xacro:if value="${right_sensor in ('pts_2_0', 'flat_pad', 'paxini_m2824')}">
       <disable_collisions link1="${ns}_right_finger" link2="${ns}_right_sensor_link" reason="Adjacent"/>
       <disable_collisions link1="${ns}_base" link2="${ns}_right_sensor_link" reason="Adjacent"/>
     </xacro:if>

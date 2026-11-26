@@ -49,14 +49,14 @@ kinematics:
   offset_m: 0.0176776695296637
   # 协议范围表示控制接口可编码的角度，机构行程由实际曲柄角限定。
   protocol_range_rad: [0.0, 1.7]
-  mechanism_range_rad: [0.0, 1.5707963267948966]
+  mechanism_range_rad: [0.0, 1.7000000000000000]
   position_min_rad: 0.0
-  position_max_rad: 1.5707963267948966
-  single_finger_stroke_m: 0.0353553390593274
-  total_stroke_m: 0.0707106781186548
+  position_max_rad: 1.7000000000000000
+  single_finger_stroke_m: 0.0375532543682642
+  total_stroke_m: 0.0751065087365284
 
   module_contact:
-    # 两侧各装一个 PTS 2.0 或平垫时，名义首次接触由 6.6 mm 单侧突出量决定。
+    # 两侧各装一个 PTS 2.0 或平垫时，名义首次接触由 6.6 mm 单侧突出量决定；其余组合由 get_stroke_limits 计算。
     applicable_modules: [pts_2_0, flat_pad]
     first_contact_q_rad: 1.450403783302
     no_contact_range_rad: [0.0, 1.450403783302]

@@ -38,6 +38,7 @@ def test_package_discovery_and_specs():
     """验证资产列表、单一真值规格、电机/相机参数和传感器规格均可正常读取。"""
     assert "pts_2_0" in list_sensors()
     assert "flat_pad" in list_sensors()
+    assert "paxini_m2824" in list_sensors()
     assert "realsense_d435i" in list_accessories()
 
     specs = get_specs()
@@ -55,6 +56,12 @@ def test_package_discovery_and_specs():
     assert pts["tactile"]["rows"] == 3 and pts["tactile"]["cols"] == 3
     assert math.isclose(pts["mass_kg"], 0.015, abs_tol=1e-6)
     assert len(pts["taxels_in_sensor_mount"]) == 9
+
+    paxini = get_sensor_spec("paxini_m2824")
+    assert paxini["tactile"]["mode"] == "pad_sites"
+    assert paxini["tactile"]["count"] == 135
+    assert len(paxini["taxels_in_sensor_mount"]) == 135
+    assert math.isclose(paxini["thickness_to_tip_m"], 0.0037, abs_tol=1e-9)
 
 
 def test_mass_budget_matches_686g_and_no_double_counting():
@@ -88,6 +95,8 @@ def test_prebuilt_and_modular_mjcf_compile():
         ("pts_2_0", "pts_2_0", True),
         ("pts_2_0", "flat_pad", False),
         ("flat_pad", "flat_pad", True),
+        ("paxini_m2824", "paxini_m2824", True),
+        ("pts_2_0", "paxini_m2824", False),
         (None, None, False),
     ]
     for left, right, cam in combos:
@@ -108,6 +117,16 @@ def test_prebuilt_and_modular_mjcf_compile():
         if right == "flat_pad":
             assert m.geom("right_pad_collision").id >= 0
             assert m.site("right_pad_center").id >= 0
+        for side, sensor_name in (("left", left), ("right", right)):
+            if sensor_name == "paxini_m2824":
+                gid = m.geom(f"{side}_pad_collision").id
+                assert m.geom_type[gid] == mujoco.mjtGeom.mjGEOM_BOX
+                body_id = m.body(f"{side}_sensor_body").id
+                body_geoms = np.flatnonzero(m.geom_bodyid == body_id)
+                assert all(m.geom_type[g] != mujoco.mjtGeom.mjGEOM_SPHERE for g in body_geoms)
+                assert m.site(f"{side}_pad_center").id >= 0
+                assert m.site(f"{side}_taxel_001").id >= 0
+                assert m.site(f"{side}_taxel_135").id >= 0
 
 
 def test_taxel_poses_match_onshape_export():
@@ -215,3 +234,48 @@ def test_pts_2_0_tactile_normal_force_positive_on_compression():
     assert len(contact_forces["right"]) >= 3
     assert all(fz > 0.05 for fz in contact_forces["left"])
     assert all(fz > 0.05 for fz in contact_forces["right"])
+
+
+def test_paxini_m2824_pad_normal_force_positive_on_compression():
+    """验证 paxini_m2824 盒式平垫夹紧方块时，接触发生于 pad_collision 且局部 Fz > 0。"""
+    spec = build_gripper_spec(
+        left_sensor="paxini_m2824",
+        right_sensor="paxini_m2824",
+        with_camera=False,
+        fixed_base=True,
+        backlash_rad=0.0,
+    )
+    cube = spec.worldbody.add_body(name="test_box", pos=[0.0, 0.0, 0.14555])
+    cube.add_geom(
+        name="test_box_geom",
+        type=mujoco.mjtGeom.mjGEOM_BOX,
+        size=[0.020, 0.015, 0.015],
+        rgba=[0.2, 0.7, 0.3, 1.0],
+    )
+    m = spec.compile()
+    d = mujoco.MjData(m)
+    d.ctrl[0] = 1.0
+    for _ in range(800):
+        mujoco.mj_step(m, d)
+
+    pad_sites = {
+        m.geom(f"{side}_pad_collision").id: (side, m.site(f"{side}_pad_center").id)
+        for side in ("left", "right")
+    }
+    contact_forces = {"left": [], "right": []}
+    cfrc = np.empty(6, dtype=float)
+    for cid in range(d.ncon):
+        con = d.contact[cid]
+        for gid in (con.geom1, con.geom2):
+            if gid not in pad_sites:
+                continue
+            side, sid = pad_sites[gid]
+            mujoco.mj_contactForce(m, d, cid, cfrc)
+            f_on_geom2_w = np.asarray(con.frame).reshape(3, 3).T @ cfrc[:3]
+            f_on_pad_w = f_on_geom2_w if gid == con.geom2 else -f_on_geom2_w
+            f_local = np.asarray(d.site_xmat[sid]).reshape(3, 3).T @ f_on_pad_w
+            contact_forces[side].append(float(f_local[2]))
+
+    assert contact_forces["left"] and contact_forces["right"]
+    assert sum(contact_forces["left"]) > 0.1
+    assert sum(contact_forces["right"]) > 0.1

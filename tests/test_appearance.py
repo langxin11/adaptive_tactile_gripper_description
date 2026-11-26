@@ -21,38 +21,47 @@ def test_compiled_visual_materials(preset):
     """用包含全部材质类别的混装夹爪，核对渲染场景最终解析出的颜色与高光。"""
     library = _library()
     assert set(list_appearances()) == {"realistic", "cad"}
-    model = build_gripper_spec(appearance=preset, right_sensor="flat_pad").compile()
-    data = mujoco.MjData(model)
-    mujoco.mj_forward(model, data)
-    scene = mujoco.MjvScene(model, maxgeom=256)
-    camera = mujoco.MjvCamera()
-    mujoco.mjv_defaultCamera(camera)
-    mujoco.mjv_updateScene(
-        model, data, mujoco.MjvOption(), None, camera, mujoco.mjtCatBit.mjCAT_ALL, scene
-    )
     seen = set()
-    for geom in scene.geoms[: scene.ngeom]:
-        if geom.objtype != mujoco.mjtObj.mjOBJ_GEOM or model.geom_group[geom.objid] != 2:
-            continue
-        gid = geom.objid
-        mesh = (
-            model.mesh(model.geom_dataid[gid]).name
-            if model.geom_type[gid] == mujoco.mjtGeom.mjGEOM_MESH
-            else model.geom(gid).name
+    for left_sensor, right_sensor, with_camera in (
+        ("pts_2_0", "flat_pad", True),
+        ("paxini_m2824", None, False),
+    ):
+        model = build_gripper_spec(
+            appearance=preset,
+            left_sensor=left_sensor,
+            right_sensor=right_sensor,
+            with_camera=with_camera,
+        ).compile()
+        data = mujoco.MjData(model)
+        mujoco.mj_forward(model, data)
+        scene = mujoco.MjvScene(model, maxgeom=256)
+        camera = mujoco.MjvCamera()
+        mujoco.mjv_defaultCamera(camera)
+        mujoco.mjv_updateScene(
+            model, data, mujoco.MjvOption(), None, camera, mujoco.mjtCatBit.mjCAT_ALL, scene
         )
-        for prefix in ("left_", "right_", "cam_"):
-            mesh = mesh.removeprefix(prefix)
-        category = library["mesh_classes"][mesh]
-        material = library["materials"][category]
-        seen.add(mesh)
-        assert geom.matid >= 0
-        assert model.material(geom.matid).name in [
-            prefix + category for prefix in ("", "left_", "right_", "cam_")
-        ]
-        color = library["presets"][preset]["mesh_rgba"].get(mesh, material["rgba"])
-        np.testing.assert_array_equal(geom.rgba, np.asarray(color, dtype=np.float32))
-        for field in ("specular", "shininess", "reflectance"):
-            assert getattr(model, "mat_" + field)[geom.matid] == pytest.approx(material[field])
+        for geom in scene.geoms[: scene.ngeom]:
+            if geom.objtype != mujoco.mjtObj.mjOBJ_GEOM or model.geom_group[geom.objid] != 2:
+                continue
+            gid = geom.objid
+            mesh = (
+                model.mesh(model.geom_dataid[gid]).name
+                if model.geom_type[gid] == mujoco.mjtGeom.mjGEOM_MESH
+                else model.geom(gid).name
+            )
+            for prefix in ("left_", "right_", "cam_"):
+                mesh = mesh.removeprefix(prefix)
+            category = library["mesh_classes"][mesh]
+            material = library["materials"][category]
+            seen.add(mesh)
+            assert geom.matid >= 0
+            assert model.material(geom.matid).name in [
+                prefix + category for prefix in ("", "left_", "right_", "cam_")
+            ]
+            color = library["presets"][preset]["mesh_rgba"].get(mesh, material["rgba"])
+            np.testing.assert_array_equal(geom.rgba, np.asarray(color, dtype=np.float32))
+            for field in ("specular", "shininess", "reflectance"):
+                assert getattr(model, "mat_" + field)[geom.matid] == pytest.approx(material[field])
     assert seen == set(library["mesh_classes"])
 
 
@@ -101,7 +110,13 @@ def test_invalid_appearance_and_unmapped_mesh():
 
 @pytest.mark.parametrize(
     "module",
-    ["gripper_chassis", "sensors/pts_2_0", "sensors/flat_pad", "accessories/realsense_d435i"],
+    [
+        "gripper_chassis",
+        "sensors/pts_2_0",
+        "sensors/flat_pad",
+        "sensors/paxini_m2824",
+        "accessories/realsense_d435i",
+    ],
 )
 def test_xacro_matches_asset_colors(module):
     """对照每个模组的原语和网格，验证随包 Xacro 颜色与 MJCF 一致。"""

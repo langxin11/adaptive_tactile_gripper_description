@@ -3,6 +3,7 @@
   <xacro:include filename="$(find adaptive_tactile_gripper_description)/urdf/gripper_chassis.xacro"/>
   <xacro:include filename="$(find adaptive_tactile_gripper_description)/urdf/sensors/pts_2_0.xacro"/>
   <xacro:include filename="$(find adaptive_tactile_gripper_description)/urdf/sensors/flat_pad.xacro"/>
+  <xacro:include filename="$(find adaptive_tactile_gripper_description)/urdf/sensors/paxini_m2824.xacro"/>
   <xacro:include filename="$(find adaptive_tactile_gripper_description)/urdf/accessories/realsense_d435i.xacro"/>
 
   <!-- 顶层可配置夹爪宏：支持左右传感器独立替换与相机可选挂载 -->
@@ -20,12 +21,18 @@
     <xacro:if value="${left_sensor == 'flat_pad'}">
       <xacro:flat_pad_sensor prefix="${ns}_left" parent="${ns}_left_sensor_mount" safety_distance="${safety_distance}"/>
     </xacro:if>
+    <xacro:if value="${left_sensor == 'paxini_m2824'}">
+      <xacro:paxini_m2824_sensor prefix="${ns}_left" parent="${ns}_left_sensor_mount" safety_distance="${safety_distance}"/>
+    </xacro:if>
 
     <xacro:if value="${right_sensor == 'pts_2_0'}">
       <xacro:pts_2_0_sensor prefix="${ns}_right" parent="${ns}_right_sensor_mount" safety_distance="${safety_distance}"/>
     </xacro:if>
     <xacro:if value="${right_sensor == 'flat_pad'}">
       <xacro:flat_pad_sensor prefix="${ns}_right" parent="${ns}_right_sensor_mount" safety_distance="${safety_distance}"/>
+    </xacro:if>
+    <xacro:if value="${right_sensor == 'paxini_m2824'}">
+      <xacro:paxini_m2824_sensor prefix="${ns}_right" parent="${ns}_right_sensor_mount" safety_distance="${safety_distance}"/>
     </xacro:if>
 
     <xacro:if value="${with_camera}">

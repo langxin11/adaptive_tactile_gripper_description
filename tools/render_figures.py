@@ -283,6 +283,7 @@ def kinematics_figure():
     ):
         axes[2].plot(q, force, color=color, ls=ls, label=f"{name} {torque:g} N·m")
     axes[2].legend(loc="upper center", bbox_to_anchor=(0.5, -0.30))
+    has_protocol_margin = d["protocol"] > q[-1] + 1e-9
     for ax, title, unit in zip(
         axes,
         ("闭合与开口", "闭合雅可比", "理论单指力"),
@@ -292,23 +293,33 @@ def kinematics_figure():
         ax.set_title(title, pad=7)
         ax.set_ylabel(unit, labelpad=2)
         ax.set_xlabel("曲柄角 $q$ (rad)", labelpad=1)
-        ax.axvspan(q[-1], d["protocol"], color="#eceff2", zorder=0)
+        if has_protocol_margin:
+            ax.axvspan(q[-1], d["protocol"], color="#eceff2", zorder=0)
         ax.axvline(d["contact"], color="#bf3030", ls="--", lw=0.9)
         ax.axvline(d["protocol"], color="#303238", ls=":", lw=1)
         ax.set_xlim(-0.03, d["protocol"] + 0.035)
         ax.xaxis.set_major_locator(MaxNLocator(nbins=4))
         ax.grid(axis="y", color="#e0e3e6", lw=0.45, ls="-")
     label_panels(axes)
-    handles = [
+    handles: list[Line2D | Patch] = [
         Line2D([], [], ls="--", color="#bf3030", label=f"PTS 首次接触 {d['contact']:.4f} rad"),
-        Patch(color="#eceff2", label=r"超出机构行程 $q>\pi/2$"),
-        Line2D([], [], ls=":", color="#303238", label=f"协议上限 {d['protocol']:.2f} rad"),
     ]
+    if has_protocol_margin:
+        handles.append(Patch(color="#eceff2", label=rf"超出机构行程 $q>{q[-1]:.2f}$"))
+    handles.append(
+        Line2D(
+            [],
+            [],
+            ls=":",
+            color="#303238",
+            label=f"{'协议上限' if has_protocol_margin else '机构与协议上限'} {d['protocol']:.2f} rad",
+        )
+    )
     fig.legend(
         handles=handles,
         loc="upper center",
         bbox_to_anchor=(0.5, 0.994),
-        ncol=3,
+        ncol=len(handles),
         handlelength=1.4,
         columnspacing=1,
     )

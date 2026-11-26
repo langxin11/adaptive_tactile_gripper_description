@@ -21,7 +21,7 @@ def test_version():
 def test_info(capsys):
     assert main(["info"]) == 0
     text = capsys.readouterr().out
-    for value in ("776.955 g", "145.550", "35.355 mm", "1.450404 rad", "-20.000", "-5.000"):
+    for value in ("776.955 g", "145.550", "37.553 mm", "1.450404 rad", "-20.000", "-5.000"):
         assert value in text
     assert main(["info", "--no-camera"]) == 0
     text = capsys.readouterr().out

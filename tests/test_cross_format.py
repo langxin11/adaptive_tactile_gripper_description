@@ -22,6 +22,7 @@ from adaptive_tactile_gripper_description import (
     get_data_root,
     get_joint_positions,
     get_mjcf_path,
+    get_sensor_spec,
     get_specs,
     get_stroke_limits,
     get_tactile_layout,
@@ -30,7 +31,7 @@ from adaptive_tactile_gripper_description.kinematics import drive_angle_for_clos
 
 NS = "gripper"
 SIDES = ("left", "right")
-MODULES = ("pts_2_0", "flat_pad", "none")
+MODULES = ("pts_2_0", "flat_pad", "paxini_m2824", "none")
 CONFIGURATIONS = list(product(MODULES, MODULES, (False, True)))
 
 
@@ -373,7 +374,7 @@ def test_only_drive_has_armature(variant):
     """校验驱动保留原参数，销轴、滑块和回差广义自由度的附加惯量为零。"""
     model = mujoco.MjModel.from_xml_path(str(get_mjcf_path(variant)))
     assert model.joint("gripper_drive").armature[0] == pytest.approx(0.002074755, abs=1e-12)
-    np.testing.assert_allclose(model.joint("gripper_drive").range, [0, math.pi / 2], atol=1e-8)
+    np.testing.assert_allclose(model.joint("gripper_drive").range, [0, 1.7], atol=1e-8)
     drive_dof = model.jnt_dofadr[model.joint("gripper_drive").id]
     assert np.flatnonzero(model.dof_armature).tolist() == [drive_dof]
 
@@ -410,18 +411,23 @@ def test_module_stroke_and_collision_exclusions(left, right, camera):
     """全行程检查结构碰撞，保留模组到达实际接触端点后的指间接触。"""
     limits = get_stroke_limits(left, right)
     assert limits["protocol_range_rad"] == (0.0, 1.7)
-    assert limits["mechanism_range_rad"] == (0.0, math.pi / 2)
-    assert limits["mechanism_single_finger_stroke_m"] == pytest.approx(0.035355339)
+    assert limits["mechanism_range_rad"] == (0.0, 1.7)
+    assert limits["mechanism_single_finger_stroke_m"] == pytest.approx(0.037553254, abs=1e-7)
     contact_q = limits["first_contact_q_rad"]
     if "none" not in (left, right):
-        assert contact_q == pytest.approx(1.450404, abs=1e-6)
-        assert limits["first_contact_single_finger_closure_m"] == pytest.approx(0.03315)
+        tip_sum = (
+            get_sensor_spec(left)["thickness_to_tip_m"]
+            + get_sensor_spec(right)["thickness_to_tip_m"]
+        )
+        expected_slide = (0.0795 - tip_sum) / 2
+        assert limits["first_contact_single_finger_closure_m"] == pytest.approx(expected_slide)
+        assert contact_q == pytest.approx(drive_angle_for_closure(expected_slide), abs=1e-6)
     else:
         assert contact_q is None
     model = build_gripper_spec(
         left_sensor=left, right_sensor=right, with_camera=camera, fixed_base=True
     ).compile()
-    for q in np.linspace(0.0, math.pi / 2, 101):
+    for q in np.linspace(0.0, 1.7, 101):
         data = _forward(model, q)
         contacts = [(model.geom(c.geom1).name, model.geom(c.geom2).name) for c in data.contact]
         if contact_q is None or q < contact_q:
@@ -575,6 +581,14 @@ def test_traceable_payload_and_tactile_layout():
     assert layout["right"]["site_quat_in_sensor_mount_wxyz"] == [0, 1, 0, 0]
     assert layout["right"]["taxels"][4]["geom_name"] == "gripper/right_taxel_geom_11"
     assert layout["right"]["taxels"][4]["site_name"] == "gripper/right_taxel_11"
+    paxini_layout = get_tactile_layout("paxini_m2824", "flat_pad", prefix="gripper/")
+    assert paxini_layout["right"] is None
+    assert paxini_layout["left"]["mode"] == "pad_sites"
+    assert paxini_layout["left"]["count"] == 135
+    assert paxini_layout["left"]["pad_geom_name"] == "gripper/left_pad_collision"
+    assert paxini_layout["left"]["taxels"][0]["geom_name"] == "gripper/left_pad_collision"
+    assert paxini_layout["left"]["taxels"][0]["site_name"] == "gripper/left_taxel_001"
+    assert paxini_layout["left"]["taxels"][-1]["site_name"] == "gripper/left_taxel_135"
     assert get_closure_jacobian(0.0) == pytest.approx(0.035355339059)
     q, step = 0.75, 1e-5
     numeric = (
@@ -635,7 +649,14 @@ def test_srdf_members_and_nominal_camera_switch(expand_xacro, left, right, camer
 
 
 @pytest.mark.parametrize(
-    "sensors", [("pts_2_0", "pts_2_0"), ("pts_2_0", "flat_pad"), ("flat_pad", "flat_pad")]
+    "sensors",
+    [
+        ("pts_2_0", "pts_2_0"),
+        ("pts_2_0", "flat_pad"),
+        ("flat_pad", "flat_pad"),
+        ("paxini_m2824", "paxini_m2824"),
+        ("pts_2_0", "paxini_m2824"),
+    ],
 )
 def test_close_gap_with_safety_distance(expand_xacro, sensors):
     """检查左右所有实体沿闭合轴的间隙，包含后向外扩的壳体与指背。"""
@@ -645,6 +666,11 @@ def test_close_gap_with_safety_distance(expand_xacro, sensors):
         joint.get("name").removeprefix(f"{NS}_"): float(joint.get("value"))
         for joint in close.findall("joint")
     }
+    tip_sum = (
+        get_sensor_spec(sensors[0])["thickness_to_tip_m"]
+        + get_sensor_spec(sensors[1])["thickness_to_tip_m"]
+    )
+    expected_gap = 0.0795 - 2 * 0.032 - tip_sum
     for margin in (0.0, 0.02):
         urdf = expand_xacro(safety_distance=margin, **args)
         poses = _urdf_poses(urdf, positions)
@@ -662,7 +688,7 @@ def test_close_gap_with_safety_distance(expand_xacro, sensors):
                         radius = np.abs(pose[0, :3]) @ half_dims
                     extents.append(sign * pose[0, 3] + radius)
             inner[side] = max(extents)
-        assert -sum(inner.values()) == pytest.approx(0.0023, abs=1e-10)
+        assert -sum(inner.values()) == pytest.approx(expected_gap, abs=1e-10)
 
 
 def test_host_material_resolution(expand_xacro, tmp_path):
@@ -702,3 +728,84 @@ def test_host_material_resolution(expand_xacro, tmp_path):
     resolved = {row.split()[0]: list(map(float, row.split()[1:])) for row in result.splitlines()}
     np.testing.assert_allclose(resolved["host"], [1, 0, 0, 1])
     np.testing.assert_allclose(resolved["rail"], np.array([174, 181, 188, 255]) / 255, atol=1e-6)
+
+
+def test_paxini_m2824_mjcf_urdf_parity_and_envelope(expand_xacro):
+    """核对 paxini_m2824 在 MJCF 与 URDF 间的位姿、惯量、盒式碰撞一致，且全部网格顶点受包络覆盖。"""
+    args = dict(left_sensor="paxini_m2824", right_sensor="paxini_m2824", with_camera="false")
+    urdf = expand_xacro(**args)
+    q = drive_angle_for_closure(0.015)
+    poses = _urdf_poses(urdf, get_joint_positions(q))
+    model = build_gripper_spec(
+        left_sensor="paxini_m2824", right_sensor="paxini_m2824", with_camera=False, fixed_base=True
+    ).compile()
+    data = _forward(model, q)
+
+    for side in SIDES:
+        link = urdf.find(f"link[@name='{NS}_{side}_sensor_link']")
+        link_pose = poses[link.get("name")]
+        body_id = model.body(f"{side}_sensor_body").id
+        body = data.body(body_id)
+        np.testing.assert_allclose(link_pose, _homogeneous(body.xpos, body.xmat), atol=1e-8)
+
+        element = link.find("inertial")
+        mass = float(element.find("mass").get("value"))
+        urdf_inertial = link_pose @ _origin(element)
+        inertia = element.find("inertia")
+        urdf_tensor = np.array(
+            [[float(inertia.get(f"i{min(a, b)}{max(a, b)}")) for b in "xyz"] for a in "xyz"]
+        )
+        urdf_tensor = urdf_inertial[:3, :3] @ urdf_tensor @ urdf_inertial[:3, :3].T
+        mjcf_tensor = (
+            body.ximat.reshape(3, 3)
+            @ np.diag(model.body_inertia[body_id])
+            @ body.ximat.reshape(3, 3).T
+        )
+        assert mass == pytest.approx(model.body_mass[body_id], abs=1e-12)
+        np.testing.assert_allclose(urdf_inertial[:3, 3], body.xipos, atol=1e-8)
+        np.testing.assert_allclose(urdf_tensor, mjcf_tensor, atol=1e-10)
+
+        geom_ids = np.flatnonzero(model.geom_bodyid == body_id)
+        collisions = [
+            (link_pose @ _origin(col), col.find("geometry")[0]) for col in link.findall("collision")
+        ]
+        assert len(geom_ids) == len(link.findall("visual")) + len(collisions)
+        for geom_id, el in zip(
+            geom_ids, link.findall("visual") + link.findall("collision"), strict=True
+        ):
+            geom = data.geom(int(geom_id))
+            pos, rot = geom.xpos, geom.xmat.reshape(3, 3)
+            shape = el.find("geometry")[0]
+            if shape.tag == "mesh":
+                assert model.geom_type[geom_id] == mujoco.mjtGeom.mjGEOM_MESH
+                mesh_id = model.geom_dataid[geom_id]
+                rot = rot @ _quat_matrix(model.mesh_quat[mesh_id]).T
+                pos = pos - rot @ model.mesh_pos[mesh_id]
+                mesh = model.mesh(mesh_id)
+                start = mesh.vertadr[0]
+                verts = (
+                    model.mesh_vert[start : start + mesh.vertnum[0]] @ geom.xmat.reshape(3, 3).T
+                    + geom.xpos
+                )
+                covered = np.zeros(len(verts), dtype=bool)
+                for col_pose, col_shape in collisions:
+                    assert col_shape.tag == "box"
+                    local = (verts - col_pose[:3, 3]) @ col_pose[:3, :3]
+                    half = np.fromstring(col_shape.get("size"), sep=" ") / 2
+                    covered |= np.all(np.abs(local) <= half + 1e-8, axis=1)
+                assert covered.all(), (side, mesh.name, verts[~covered][0])
+            else:
+                assert shape.tag == "box" and model.geom_type[geom_id] == mujoco.mjtGeom.mjGEOM_BOX
+                np.testing.assert_allclose(
+                    2 * model.geom_size[geom_id],
+                    list(map(float, shape.get("size").split())),
+                    atol=1e-9,
+                )
+            world_pose = link_pose @ _origin(el)
+            np.testing.assert_allclose(world_pose[:3, 3], pos, atol=2e-7)
+            np.testing.assert_allclose(world_pose[:3, :3], rot, atol=1e-5)
+
+        tip = data.site(f"{side}_fingertip")
+        np.testing.assert_allclose(
+            poses[f"{NS}_{side}_fingertip"], _homogeneous(tip.xpos, tip.xmat), atol=1e-8
+        )

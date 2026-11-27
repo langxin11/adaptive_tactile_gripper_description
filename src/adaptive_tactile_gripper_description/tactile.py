@@ -1,10 +1,10 @@
-"""MuJoCo 触觉接触对注册与兼容 ``contact_geom`` / ``pad_sites`` 的三轴力读取器。"""
+"""MuJoCo 触觉接触对注册、三轴阵列力读取器与六轴接触力旋量（Wrench）读取器。"""
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import mujoco
 import numpy as np
@@ -54,22 +54,30 @@ def add_tactile_contact_pairs(
     right_sensor: str | None = "pts_2_0",
     prefix: str = "",
     pair_prefix: str = "tactile_object",
-    condim: int = 3,
+    condim: int | None = None,
     friction_coefficient: float | None = None,
+    torsional_friction: float | None = None,
+    rolling_friction: float | None = None,
     solref: Sequence[float] | None = None,
     solimp: Sequence[float] | None = None,
 ) -> list[str]:
     """为所选指尖触觉模组与目标物体几何体注册显式 MuJoCo 接触 ``<pair>``。
 
     - ``contact_geom``（如 ``pts_2_0``）：为每颗触觉碰撞球各注册 1 条 ``<pair>``；
-    - ``pad_sites``（如 ``paxini_m2824``）：仅对整块 ``pad_geom_name`` 注册 **1 条** ``<pair>``，避免重复配对导致接触倍增；
+    - ``pad_sites``（如 ``paxini_m2824``）与 ``pad_wrench``（如 ``soft_dome``）：仅对整块
+      ``pad_geom_name`` 注册 **1 条** ``<pair>``，避免重复配对导致接触倍增；
     - 无触觉侧（如 ``flat_pad`` 或 ``None``）：自动跳过。
+    ``condim`` 省略时优先采用模组 ``contact.condim``（如 ``soft_dome`` 默认 ``4``），未声明时回退为 ``3``。
     已存在于 ``scene.pairs`` 的几何体组合会自动跳过以保证幂等。返回本次新增的 ``<pair>`` 名称列表。
     """
-    if condim not in _VALID_CONDIM:
+    if condim is not None and (isinstance(condim, bool) or condim not in _VALID_CONDIM):
         raise ValueError(f"condim 必须属于 {_VALID_CONDIM}，当前为 {condim!r}")
     if friction_coefficient is not None and friction_coefficient < 0.0:
         raise ValueError(f"friction_coefficient 不能为负数：{friction_coefficient!r}")
+    if torsional_friction is not None and torsional_friction < 0.0:
+        raise ValueError(f"torsional_friction 不能为负数：{torsional_friction!r}")
+    if rolling_friction is not None and rolling_friction < 0.0:
+        raise ValueError(f"rolling_friction 不能为负数：{rolling_friction!r}")
 
     object_geoms = (
         [object_geom] if isinstance(object_geom, str) else list(dict.fromkeys(object_geom))
@@ -89,7 +97,7 @@ def add_tactile_contact_pairs(
         mode = side_layout["mode"]
         if mode == "contact_geom":
             sensor_geoms = [taxel["geom_name"] for taxel in side_layout["taxels"]]
-        elif mode == "pad_sites":
+        elif mode in ("pad_sites", "pad_wrench"):
             sensor_geoms = [side_layout["pad_geom_name"]]
         else:
             raise ValueError(f"未知触觉布局模式 {mode!r}")
@@ -104,10 +112,33 @@ def add_tactile_contact_pairs(
             continue
 
         contact_cfg: dict[str, Any] | None = None
-        if friction_coefficient is None or solref is None or solimp is None:
+        if any(
+            param is None
+            for param in (
+                condim,
+                friction_coefficient,
+                torsional_friction,
+                rolling_friction,
+                solref,
+                solimp,
+            )
+        ):
             raw_contact = get_sensor_spec(sensor_name).get("contact")
             if isinstance(raw_contact, dict):
                 contact_cfg = raw_contact
+
+        raw_condim = (
+            condim
+            if condim is not None
+            else (
+                contact_cfg.get("condim", 3)
+                if contact_cfg is not None and contact_cfg.get("condim") is not None
+                else 3
+            )
+        )
+        if isinstance(raw_condim, bool) or raw_condim not in _VALID_CONDIM:
+            raise ValueError(f"condim 必须属于 {_VALID_CONDIM}，当前为 {raw_condim!r}")
+        pair_condim = int(raw_condim)
 
         mu = float(
             friction_coefficient
@@ -116,6 +147,28 @@ def add_tactile_contact_pairs(
         )
         if mu < 0.0:
             raise ValueError(f"friction_coefficient 不能为负数：{mu!r}")
+        pair_torsional = float(
+            torsional_friction
+            if torsional_friction is not None
+            else (
+                contact_cfg["torsional_friction"]
+                if contact_cfg is not None and contact_cfg.get("torsional_friction") is not None
+                else _TORSIONAL_FRICTION
+            )
+        )
+        if pair_torsional < 0.0:
+            raise ValueError(f"torsional_friction 不能为负数：{pair_torsional!r}")
+        pair_rolling = float(
+            rolling_friction
+            if rolling_friction is not None
+            else (
+                contact_cfg["rolling_friction"]
+                if contact_cfg is not None and contact_cfg.get("rolling_friction") is not None
+                else _ROLLING_FRICTION
+            )
+        )
+        if pair_rolling < 0.0:
+            raise ValueError(f"rolling_friction 不能为负数：{pair_rolling!r}")
         pair_solref = [
             float(x)
             for x in (
@@ -135,9 +188,9 @@ def add_tactile_contact_pairs(
         pair_friction = [
             mu,
             mu,
-            _TORSIONAL_FRICTION,
-            _ROLLING_FRICTION,
-            _ROLLING_FRICTION,
+            pair_torsional,
+            pair_rolling,
+            pair_rolling,
         ]
 
         for obj_idx, geom_idx, sensor_geom, obj_geom in pending_pairs:
@@ -158,7 +211,7 @@ def add_tactile_contact_pairs(
                 name=pair_name,
                 geomname1=sensor_geom,
                 geomname2=obj_geom,
-                condim=condim,
+                condim=pair_condim,
                 solref=pair_solref,
                 solimp=pair_solimp,
                 friction=pair_friction,
@@ -403,6 +456,32 @@ def _build_rigid_pad_cache(
     )
 
 
+def _refresh_rigid_pad_cache(
+    model: MjModel,
+    pad_gid: int,
+    site_ids: np.ndarray,
+    cache: _RigidPadCache | None,
+) -> _RigidPadCache | None:
+    if cache is None:
+        return None
+    cur_pos = np.asarray(model.site_pos[site_ids], dtype=np.float64)
+    cur_quat = np.asarray(model.site_quat[site_ids], dtype=np.float64)
+    cur_gpos = np.asarray(model.geom_pos[pad_gid], dtype=np.float64)
+    cur_gquat = np.asarray(model.geom_quat[pad_gid], dtype=np.float64)
+    cur_gsize = np.asarray(model.geom_size[pad_gid], dtype=np.float64)
+    cur_gtype = int(model.geom_type[pad_gid])
+    if (
+        np.array_equal(cur_pos, cache.pos_snapshot)
+        and np.array_equal(cur_quat, cache.quat_snapshot)
+        and np.array_equal(cur_gpos, cache.geom_pos_snapshot)
+        and np.array_equal(cur_gquat, cache.geom_quat_snapshot)
+        and np.array_equal(cur_gsize, cache.geom_size_snapshot)
+        and cur_gtype == cache.geom_type_snapshot
+    ):
+        return cache
+    return _build_rigid_pad_cache(model, pad_gid, site_ids)
+
+
 def _solve_2d_tilt(
     lp: np.ndarray, u0: np.ndarray, u1: np.ndarray, tol_u: float
 ) -> tuple[np.ndarray, float]:
@@ -623,6 +702,11 @@ class TactileForceReader:
         self._sides: dict[str, _SideSpec | None] = {}
         self._rigid_pads: dict[str, _RigidPadCache | None] = {"left": None, "right": None}
         self._geom_owners: dict[int, list[str]] = {}
+        self._left_sensor = left_sensor
+        self._right_sensor = right_sensor
+        self._prefix = prefix
+        self._target_geoms_arg = target_geoms
+        self._wrench_readers: dict[str, TactileWrenchReader] = {}
         for side in ("left", "right"):
             side_layout = self._layout[side]
             if side_layout is None:
@@ -630,13 +714,19 @@ class TactileForceReader:
                 continue
             mode = side_layout["mode"]
             grid_indices = _grid_indices(side_layout) if mode == "contact_geom" else None
-            site_ids = np.array(
-                [
-                    self._require_id(model, _mj.mjtObj.mjOBJ_SITE, t["site_name"])
-                    for t in side_layout["taxels"]
-                ],
-                dtype=np.intp,
-            )
+            if mode == "pad_wrench":
+                site_ids = np.array(
+                    [self._require_id(model, _mj.mjtObj.mjOBJ_SITE, side_layout["site_name"])],
+                    dtype=np.intp,
+                )
+            else:
+                site_ids = np.array(
+                    [
+                        self._require_id(model, _mj.mjtObj.mjOBJ_SITE, t["site_name"])
+                        for t in side_layout["taxels"]
+                    ],
+                    dtype=np.intp,
+                )
             if mode == "contact_geom":
                 geom_to_index: dict[int, int] = {}
                 for idx, taxel in enumerate(side_layout["taxels"]):
@@ -665,6 +755,18 @@ class TactileForceReader:
                     pad_geom_id=pad_gid,
                 )
                 self._rigid_pads[side] = _build_rigid_pad_cache(model, pad_gid, site_ids)
+            elif mode == "pad_wrench":
+                pad_gid = self._require_id(
+                    model, _mj.mjtObj.mjOBJ_GEOM, side_layout["pad_geom_name"]
+                )
+                self._geom_owners.setdefault(pad_gid, []).append(side)
+                self._sides[side] = _SideSpec(
+                    mode=mode,
+                    site_ids=site_ids,
+                    grid_indices=None,
+                    geom_to_index={pad_gid: 0},
+                    pad_geom_id=pad_gid,
+                )
             else:
                 raise ValueError(f"未知触觉布局模式 {mode!r}")
 
@@ -724,6 +826,7 @@ class TactileForceReader:
         for side, spec in self._sides.items():
             if (
                 spec is not None
+                and spec.mode == "pad_sites"
                 and spec.pad_geom_id is not None
                 and int(self._model.geom_type[spec.pad_geom_id]) == int(_mj.mjtGeom.mjGEOM_BOX)
             ):
@@ -754,7 +857,7 @@ class TactileForceReader:
                 for side in owners:
                     spec = self._sides[side]
                     assert spec is not None
-                    if spec.mode == "contact_geom":
+                    if spec.mode in ("contact_geom", "pad_wrench"):
                         idx = spec.geom_to_index[sensor_gid]
                         sid = int(spec.site_ids[idx])
                         rot = np.asarray(data.site_xmat[sid], dtype=np.float64).reshape(3, 3)
@@ -780,24 +883,10 @@ class TactileForceReader:
             pad_gid = spec.pad_geom_id
             assert pad_gid is not None
             is_box_pad = int(self._model.geom_type[pad_gid]) == int(_mj.mjtGeom.mjGEOM_BOX)
-            rigid = self._rigid_pads[side]
-            if rigid is not None:
-                cur_pos = np.asarray(self._model.site_pos[spec.site_ids], dtype=np.float64)
-                cur_quat = np.asarray(self._model.site_quat[spec.site_ids], dtype=np.float64)
-                cur_gpos = np.asarray(self._model.geom_pos[pad_gid], dtype=np.float64)
-                cur_gquat = np.asarray(self._model.geom_quat[pad_gid], dtype=np.float64)
-                cur_gsize = np.asarray(self._model.geom_size[pad_gid], dtype=np.float64)
-                cur_gtype = int(self._model.geom_type[pad_gid])
-                if not (
-                    np.array_equal(cur_pos, rigid.pos_snapshot)
-                    and np.array_equal(cur_quat, rigid.quat_snapshot)
-                    and np.array_equal(cur_gpos, rigid.geom_pos_snapshot)
-                    and np.array_equal(cur_gquat, rigid.geom_quat_snapshot)
-                    and np.array_equal(cur_gsize, rigid.geom_size_snapshot)
-                    and cur_gtype == rigid.geom_type_snapshot
-                ):
-                    rigid = _build_rigid_pad_cache(self._model, pad_gid, spec.site_ids)
-                    self._rigid_pads[side] = rigid
+            rigid = _refresh_rigid_pad_cache(
+                self._model, pad_gid, spec.site_ids, self._rigid_pads[side]
+            )
+            self._rigid_pads[side] = rigid
             if rigid is not None:
                 geom_pos_w = np.asarray(data.geom_xpos[pad_gid], dtype=np.float64)
                 geom_rot_w = np.asarray(data.geom_xmat[pad_gid], dtype=np.float64).reshape(3, 3)
@@ -904,6 +993,26 @@ class TactileForceReader:
 
         return result
 
+    def read_wrench(
+        self,
+        data: MjData,
+        *,
+        frame: Literal["pad_center", "ft_sensor"] = "pad_center",
+    ) -> dict[str, np.ndarray | None]:
+        """读取当前帧左右指尖的 ``(6,)`` 六轴接触力旋量 ``[Fx, Fy, Fz, Tx, Ty, Tz]``。"""
+        reader = self._wrench_readers.get(frame)
+        if reader is None:
+            reader = TactileWrenchReader(
+                self._model,
+                left_sensor=self._left_sensor,
+                right_sensor=self._right_sensor,
+                prefix=self._prefix,
+                frame=frame,
+                target_geoms=self._target_geoms_arg,
+            )
+            self._wrench_readers[frame] = reader
+        return reader.read(data)
+
     def read_grid(self, data: MjData, side: str) -> np.ndarray:
         """按测点声明的 ``row`` 和 ``col`` 返回 ``(3, rows, cols)`` 的网格力张量。"""
         if side not in self._sides:
@@ -914,3 +1023,282 @@ class TactileForceReader:
         forces = self.read(data)[side]
         assert forces is not None
         return forces[spec.grid_indices].transpose(2, 0, 1)
+
+
+@dataclass(frozen=True, slots=True)
+class _WrenchSideSpec:
+    mode: str
+    ref_site_id: int
+    geom_ids: frozenset[int]
+    box_pad_geom_id: int | None
+    box_site_ids: np.ndarray | None
+
+
+class TactileWrenchReader:
+    """统一的 MuJoCo 指尖六轴接触力/力矩（Wrench）读取器。
+
+    ``read(data)`` 按侧返回形状为 ``(6,)`` 的浮点数组 ``[Fx, Fy, Fz, Tx, Ty, Tz]``
+    （前 3 项为力，单位 N；后 3 项为力矩，单位 N·m），表达在所选参考 ``site`` 局部坐标系下：
+    - 受压时法向力 ``Fz > 0``；
+    - ``Tz`` 为绕内法向的抗扭摩擦力矩（启用 ``condim=4/6`` 时直接包含原生扭转摩擦，以及多接触点的面内力偶）；
+    - ``Tx, Ty`` 为偏心接触点相对于参考原点的力臂弯矩及 ``condim=6`` 滚动阻力矩；
+    - 无传感的一侧（如 ``flat_pad`` 或 ``None``）返回 ``None``。
+
+    ``frame`` 参数控制力矩参考系：
+    - ``"pad_center"``（默认）：以接触面顶点/中心为参考原点，直接对齐 Limit Surface 载荷定义；
+    - ``"ft_sensor"``：以 ``sensor_mount`` 底座量测中心为参考原点（要求模组声明 ``base_site_name``，
+      如 ``soft_dome``），包含指尖厚度方向的切向剪切力臂弯矩。
+    """
+
+    def __init__(
+        self,
+        model: MjModel,
+        *,
+        left_sensor: str | None = "soft_dome",
+        right_sensor: str | None = "soft_dome",
+        prefix: str = "",
+        frame: Literal["pad_center", "ft_sensor"] = "pad_center",
+        target_geoms: str
+        | int
+        | np.integer[Any]
+        | Sequence[str | int | np.integer[Any]]
+        | None = None,
+    ) -> None:
+        if frame not in ("pad_center", "ft_sensor"):
+            raise ValueError(f"frame 必须为 'pad_center' 或 'ft_sensor'，当前为 {frame!r}")
+        self._model = model
+        self._frame = frame
+        self._layout = get_tactile_layout(left_sensor, right_sensor, prefix=prefix)
+        self._target_geom_ids: frozenset[int] | None = (
+            TactileForceReader._resolve_target_geoms(model, target_geoms)
+            if target_geoms is not None
+            else None
+        )
+        self._sides: dict[str, _WrenchSideSpec | None] = {}
+        self._box_caches: dict[str, _RigidPadCache | None] = {"left": None, "right": None}
+        self._geom_owners: dict[int, list[str]] = {}
+
+        for side in ("left", "right"):
+            side_layout = self._layout[side]
+            if side_layout is None:
+                self._sides[side] = None
+                continue
+            mode = side_layout["mode"]
+            if mode == "pad_wrench":
+                if frame == "ft_sensor":
+                    site_name = side_layout.get("base_site_name")
+                    if not site_name:
+                        raise ValueError(
+                            f"{side!r} 侧模组未声明底座测量系 base_site_name，请改用 frame='pad_center'"
+                        )
+                else:
+                    site_name = side_layout["site_name"]
+                ref_sid = TactileForceReader._require_id(model, _mj.mjtObj.mjOBJ_SITE, site_name)
+                pad_gid = TactileForceReader._require_id(
+                    model, _mj.mjtObj.mjOBJ_GEOM, side_layout["pad_geom_name"]
+                )
+                is_box = int(model.geom_type[pad_gid]) == int(_mj.mjtGeom.mjGEOM_BOX)
+                if is_box:
+                    _require_box_pad_nativeccd(model)
+                self._geom_owners.setdefault(pad_gid, []).append(side)
+                pad_sids = np.array([ref_sid], dtype=np.intp)
+                self._sides[side] = _WrenchSideSpec(
+                    mode=mode,
+                    ref_site_id=ref_sid,
+                    geom_ids=frozenset((pad_gid,)),
+                    box_pad_geom_id=pad_gid,
+                    box_site_ids=pad_sids,
+                )
+                self._box_caches[side] = _build_rigid_pad_cache(model, pad_gid, pad_sids)
+            elif mode == "pad_sites":
+                if frame == "ft_sensor":
+                    raise ValueError(
+                        f"{side!r} 侧模组（{mode}）未声明底座测量系，请使用 frame='pad_center'"
+                    )
+                pad_gid = TactileForceReader._require_id(
+                    model, _mj.mjtObj.mjOBJ_GEOM, side_layout["pad_geom_name"]
+                )
+                center_name = f"{prefix}{side}_pad_center"
+                ref_sid = int(_mj.mj_name2id(model, _mj.mjtObj.mjOBJ_SITE, center_name))
+                site_ids = np.array(
+                    [
+                        TactileForceReader._require_id(model, _mj.mjtObj.mjOBJ_SITE, t["site_name"])
+                        for t in side_layout["taxels"]
+                    ],
+                    dtype=np.intp,
+                )
+                if ref_sid < 0:
+                    ref_sid = int(site_ids[len(site_ids) // 2])
+                is_box = int(model.geom_type[pad_gid]) == int(_mj.mjtGeom.mjGEOM_BOX)
+                if is_box:
+                    _require_box_pad_nativeccd(model)
+                self._geom_owners.setdefault(pad_gid, []).append(side)
+                self._sides[side] = _WrenchSideSpec(
+                    mode=mode,
+                    ref_site_id=ref_sid,
+                    geom_ids=frozenset((pad_gid,)),
+                    box_pad_geom_id=pad_gid,
+                    box_site_ids=site_ids,
+                )
+                self._box_caches[side] = _build_rigid_pad_cache(model, pad_gid, site_ids)
+            elif mode == "contact_geom":
+                if frame == "ft_sensor":
+                    raise ValueError(
+                        f"{side!r} 侧模组（{mode}）未声明底座测量系，请使用 frame='pad_center'"
+                    )
+                grid = _grid_indices(side_layout)
+                center_idx = int(grid[grid.shape[0] // 2, grid.shape[1] // 2])
+                ref_sid = TactileForceReader._require_id(
+                    model, _mj.mjtObj.mjOBJ_SITE, side_layout["taxels"][center_idx]["site_name"]
+                )
+                gids: list[int] = []
+                for taxel in side_layout["taxels"]:
+                    gid = TactileForceReader._require_id(
+                        model, _mj.mjtObj.mjOBJ_GEOM, taxel["geom_name"]
+                    )
+                    gids.append(gid)
+                    self._geom_owners.setdefault(gid, []).append(side)
+                self._sides[side] = _WrenchSideSpec(
+                    mode=mode,
+                    ref_site_id=ref_sid,
+                    geom_ids=frozenset(gids),
+                    box_pad_geom_id=None,
+                    box_site_ids=None,
+                )
+            else:
+                raise ValueError(f"未知触觉布局模式 {mode!r}")
+
+    @property
+    def layout(self) -> dict[str, dict[str, Any] | None]:
+        """返回解析后的左右触觉布局字典。"""
+        return self._layout
+
+    @property
+    def frame(self) -> str:
+        """返回当前选用的力矩参考系名称（``"pad_center"`` 或 ``"ft_sensor"``）。"""
+        return self._frame
+
+    def site_id(self, side: str) -> int | None:
+        """返回指定侧（``"left"`` 或 ``"right"``）的六轴参考 ``site`` ID；无传感时返回 ``None``。"""
+        if side not in self._sides:
+            raise ValueError(f"side 必须为 'left' 或 'right'，当前为 {side!r}")
+        spec = self._sides[side]
+        return None if spec is None else int(spec.ref_site_id)
+
+    def _accept_box_front_contact(
+        self,
+        side: str,
+        spec: _WrenchSideSpec,
+        data: MjData,
+        pos: np.ndarray,
+        normal_into_pad: np.ndarray,
+        con_dist: float,
+    ) -> bool:
+        pad_gid = spec.box_pad_geom_id
+        if pad_gid is None or int(self._model.geom_type[pad_gid]) != int(_mj.mjtGeom.mjGEOM_BOX):
+            return True
+        _require_box_pad_nativeccd(self._model)
+        geom_pos_w = np.asarray(data.geom_xpos[pad_gid], dtype=np.float64)
+        geom_rot_w = np.asarray(data.geom_xmat[pad_gid], dtype=np.float64).reshape(3, 3)
+        cache = self._box_caches[side]
+        if cache is not None:
+            pad_rot_in_geom = cache.pad_rot_in_geom
+            face_origin_in_geom = cache.face_origin_in_geom
+        else:
+            assert spec.box_site_ids is not None
+            site_pos = np.asarray(data.site_xpos[spec.box_site_ids], dtype=np.float64)
+            site_rot = np.asarray(data.site_xmat[spec.box_site_ids], dtype=np.float64).reshape(
+                -1, 3, 3
+            )
+            pad_rot_in_geom, face_origin_in_geom = _pad_frame_in_geom(
+                self._model,
+                pad_gid,
+                (site_pos - geom_pos_w) @ geom_rot_w,
+                np.einsum("ij,njk->nik", geom_rot_w.T, site_rot),
+            )
+        origin = geom_pos_w + geom_rot_w @ face_origin_in_geom
+        normal = (geom_rot_w @ pad_rot_in_geom)[:, 2]
+        if float(normal_into_pad @ normal) <= _FRONT_FACE_NORMAL_MIN_DOT:
+            return False
+        pos_on_pad = pos + 0.5 * con_dist * normal_into_pad
+        if bool(np.any(face_origin_in_geom != 0.0)):
+            return abs(float((pos_on_pad - origin) @ normal)) <= _FRONT_FACE_PLANE_TOL_M
+        return float((pos_on_pad - geom_pos_w) @ normal) <= 0.0
+
+    def read(self, data: MjData) -> dict[str, np.ndarray | None]:
+        """读取当前帧左右指尖的 ``(6,)`` 局部接触力旋量 ``[Fx, Fy, Fz, Tx, Ty, Tz]``。"""
+        result: dict[str, np.ndarray | None] = {}
+        world_forces: dict[str, np.ndarray] = {}
+        world_moments: dict[str, np.ndarray] = {}
+        ref_positions: dict[str, np.ndarray] = {}
+        ref_rotations: dict[str, np.ndarray] = {}
+
+        for side, spec in self._sides.items():
+            if spec is None:
+                result[side] = None
+                continue
+            if spec.box_pad_geom_id is not None and int(
+                self._model.geom_type[spec.box_pad_geom_id]
+            ) == int(_mj.mjtGeom.mjGEOM_BOX):
+                _require_box_pad_nativeccd(self._model)
+                assert spec.box_site_ids is not None
+                self._box_caches[side] = _refresh_rigid_pad_cache(
+                    self._model,
+                    spec.box_pad_geom_id,
+                    spec.box_site_ids,
+                    self._box_caches[side],
+                )
+            result[side] = np.zeros(6, dtype=np.float64)
+            world_forces[side] = np.zeros(3, dtype=np.float64)
+            world_moments[side] = np.zeros(3, dtype=np.float64)
+            ref_positions[side] = np.asarray(data.site_xpos[spec.ref_site_id], dtype=np.float64)
+            ref_rotations[side] = np.asarray(
+                data.site_xmat[spec.ref_site_id], dtype=np.float64
+            ).reshape(3, 3)
+
+        cfrc = np.zeros(6, dtype=np.float64)
+        for cid in range(int(data.ncon)):
+            con = data.contact[cid]
+            g1, g2 = int(con.geom1), int(con.geom2)
+            if g1 not in self._geom_owners and g2 not in self._geom_owners:
+                continue
+            cfrc.fill(0.0)
+            _mj.mj_contactForce(self._model, data, cid, cfrc)
+            if not np.any(cfrc):
+                continue
+            contact_frame = np.asarray(con.frame, dtype=np.float64).reshape(3, 3)
+            f_on_g2_world = contact_frame.T @ cfrc[:3]
+            tau_on_g2_world = contact_frame.T @ cfrc[3:]
+            pos = np.asarray(con.pos, dtype=np.float64)
+            for sensor_gid, other_gid, sign in ((g1, g2, -1.0), (g2, g1, 1.0)):
+                owners = self._geom_owners.get(sensor_gid)
+                if not owners:
+                    continue
+                if self._target_geom_ids is not None and other_gid not in self._target_geom_ids:
+                    continue
+                f_w = sign * f_on_g2_world
+                tau_w = sign * tau_on_g2_world
+                for side in owners:
+                    spec = self._sides[side]
+                    assert spec is not None
+                    if not self._accept_box_front_contact(
+                        side,
+                        spec,
+                        data,
+                        pos,
+                        sign * contact_frame[0],
+                        float(con.dist),
+                    ):
+                        continue
+                    world_forces[side] += f_w
+                    world_moments[side] += tau_w + np.cross(pos - ref_positions[side], f_w)
+
+        for side, spec in self._sides.items():
+            if spec is None:
+                continue
+            rot = ref_rotations[side]
+            out = result[side]
+            assert out is not None
+            out[:3] = rot.T @ world_forces[side]
+            out[3:] = rot.T @ world_moments[side]
+        return result

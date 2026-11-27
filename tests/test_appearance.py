@@ -26,7 +26,7 @@ def test_compiled_visual_materials(preset):
     seen = set()
     for left_sensor, right_sensor, with_camera in (
         ("pts_2_0", "flat_pad", True),
-        ("paxini_m2824", None, False),
+        ("paxini_m2824", "soft_dome", False),
     ):
         model = build_gripper_spec(
             appearance=preset,
@@ -117,6 +117,7 @@ def test_invalid_appearance_and_unmapped_mesh():
         "sensors/pts_2_0",
         "sensors/flat_pad",
         "sensors/paxini_m2824",
+        "sensors/soft_dome",
         "accessories/realsense_d435i",
     ],
 )
@@ -429,7 +430,7 @@ def test_extended_module_preserves_colors(tmp_path, monkeypatch):
     path = tmp_path / "config/appearance.yaml"
     path.parent.mkdir()
     library = _library()
-    for legacy_key in ("paxini_m2824", "paxini_m2824_adapter"):
+    for legacy_key in ("paxini_m2824", "paxini_m2824_adapter", "soft_dome", "soft_dome_base"):
         library["mesh_classes"].pop(legacy_key, None)
         library["presets"]["cad"]["mesh_rgba"].pop(legacy_key, None)
     library["mesh_classes"]["custom"] = "pts_housing"
@@ -453,11 +454,14 @@ def test_extended_module_preserves_colors(tmp_path, monkeypatch):
         )
         saved = yaml.safe_load(path.read_text())
         assert saved["presets"]["cad"]["mesh_rgba"]["custom"] == cad
-        for builtin_key in ("paxini_m2824", "paxini_m2824_adapter"):
+        for builtin_key in ("paxini_m2824", "paxini_m2824_adapter", "soft_dome", "soft_dome_base"):
             assert builtin_key in saved["mesh_classes"]
             assert builtin_key in saved["presets"]["cad"]["mesh_rgba"]
         assert (
-            build_gripper_spec(left_sensor="paxini_m2824", appearance="cad").compile() is not None
+            build_gripper_spec(
+                left_sensor="paxini_m2824", right_sensor="soft_dome", appearance="cad"
+            ).compile()
+            is not None
         )
         for preset, expected in (
             ("realistic", library["materials"]["pts_housing"]["rgba"]),

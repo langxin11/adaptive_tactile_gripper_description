@@ -476,6 +476,114 @@ def render_paxini_m2824_mounting() -> None:
     )
 
 
+def render_soft_dome_mounting() -> None:
+    """渲染 soft_dome 扁球冠安装特写、双侧零间隙闭合与 R=12 mm 球面碰撞及双参考帧示意。"""
+    spec = _prepare_spec(left_sensor="soft_dome", right_sensor="soft_dome", with_camera=False)
+    spec.light("fill").diffuse = [0.34, 0.38, 0.44]
+    m = spec.compile()
+    d = mujoco.MjData(m)
+    mujoco.mj_forward(m, d)
+
+    img_mount = _render_view(
+        m,
+        d,
+        lookat=[0.0, 0.0, 0.145],
+        distance=0.145,
+        azimuth=128.0,
+        elevation=-16.0,
+    )
+
+    contact_q = float(get_stroke_limits("soft_dome", "soft_dome")["first_contact_q_rad"])
+    positions = get_joint_positions(contact_q)
+    for name, value in positions.items():
+        if name != "gripper_backlash":
+            d.joint(name).qpos[0] = value
+    mujoco.mj_forward(m, d)
+    img_closed = _render_view(
+        m,
+        d,
+        lookat=[0.0, 0.0, 0.144],
+        distance=0.115,
+        azimuth=90.0,
+        elevation=-10.0,
+    )
+
+    mujoco.mj_resetData(m, d)
+    mujoco.mj_forward(m, d)
+    for gid in range(m.ngeom):
+        gname = m.geom(gid).name
+        if gname == "left_pad_collision":
+            m.geom_group[gid] = 5
+            m.geom_rgba[gid] = [0.05, 0.85, 0.98, 0.38]
+        elif gname == "left_sensor_housing_collision":
+            m.geom_group[gid] = 5
+            m.geom_rgba[gid] = [0.95, 0.65, 0.18, 0.42]
+        elif m.geom_type[gid] == mujoco.mjtGeom.mjGEOM_MESH:
+            mesh_name = m.mesh(m.geom_dataid[gid]).name
+            if m.body(m.geom_bodyid[gid]).name == "left_sensor_body" and mesh_name.startswith(
+                "left_soft_dome"
+            ):
+                m.geom_group[gid] = 3
+    for sid in range(m.nsite):
+        sname = m.site(sid).name
+        if sname in ("left_pad_center", "left_ft_sensor"):
+            m.site_group[sid] = 3
+            m.site_size[sid] = [0.001, 0.001, 0.001]
+            m.site_rgba[sid] = (
+                [1.0, 0.28, 0.28, 1.0] if sname == "left_pad_center" else [0.22, 0.96, 0.48, 1.0]
+            )
+        else:
+            m.site_group[sid] = 4
+
+    center = d.site("left_pad_center").xpos.copy()
+    center[2] -= 0.003
+    img_sites = Image.fromarray(
+        _render_view(
+            m,
+            d,
+            lookat=center.tolist(),
+            distance=0.072,
+            azimuth=144.0,
+            elevation=-20.0,
+            show_taxels=True,
+            show_sites=True,
+            show_site_frames=True,
+        )
+    )
+    draw = ImageDraw.Draw(img_sites)
+    legend_items = (
+        ("#22e2ff", "R=12 mm 碰撞球"),
+        ("#f5a933", "圆柱底座包络"),
+        ("#ff4c4c", "pad_center"),
+        ("#38f57a", "ft_sensor"),
+    )
+    lx = 24
+    legend_font = panel_font(25)
+    for color, text in legend_items:
+        draw.ellipse((lx, 26, lx + 16, 42), fill=color, outline="#17202a")
+        draw.text(
+            (lx + 24, 18),
+            text,
+            font=legend_font,
+            fill="#f2f5f7",
+            stroke_width=2,
+            stroke_fill="#17202a",
+        )
+        lx += int(draw.textlength(text, font=legend_font)) + 40
+
+    slide_mm = positions["left_finger_slide"] * 1000.0
+    _save_panel(
+        [img_mount, img_closed, np.asarray(img_sites)],
+        [
+            "指尖特写（2.0 mm 薄圆柱底座 + 扁球冠）",
+            f"零间隙闭合（q = {contact_q:.2f} rad，单指 {slide_mm:.2f} mm）",
+            "球面碰撞代理与六轴 F/T 参考系",
+        ],
+        OUT_DIR / "soft_dome_mounting.png",
+        suptitle="soft_dome 柔性球冠六轴 F/T 模组与碰撞示意",
+    )
+
+
 def render_closure_sequence() -> None:
     """渲染闭环曲柄滑块在 0.00 / 0.75 / 1.45 rad 下的对称闭合序列。"""
     spec = _prepare_spec(left_sensor="pts_2_0", right_sensor="pts_2_0", with_camera=False)
@@ -511,8 +619,9 @@ def main() -> int:
     render_modular_variants()
     render_tactile_collision_and_sites()
     render_paxini_m2824_mounting()
+    render_soft_dome_mounting()
     render_closure_sequence()
-    print(f"已生成 6 张预览图到 {OUT_DIR}")
+    print(f"已生成 7 张预览图到 {OUT_DIR}")
     return 0
 
 

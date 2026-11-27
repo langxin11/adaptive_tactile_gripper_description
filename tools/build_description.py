@@ -61,6 +61,16 @@ PACKAGE_NAME = "adaptive_tactile_gripper_description"
 FULL_OPEN_MOUNT_GAP_M = 0.0795
 TIP_PROTRUSION_M = 0.0066
 PAXINI_M2824_TIP_PROTRUSION_M = 0.0037
+SOFT_DOME_TIP_PROTRUSION_M = 0.0037
+SOFT_DOME_BASE_FRONT_Z_M = -0.0038
+SOFT_DOME_BACK_Z_M = -0.0058
+SOFT_DOME_BASE_RADIUS_M = 0.0120
+SOFT_DOME_RADIUS_M = 0.0120
+SOFT_DOME_SPHERE_CENTER_Z_M = round(SOFT_DOME_TIP_PROTRUSION_M - SOFT_DOME_RADIUS_M, 9)
+SOFT_DOME_TRANSDUCER_MASS_KG = 0.0060
+SOFT_DOME_SILICONE_DENSITY_KG_M3 = 1070.0
+SOFT_DOME_HOUSING_POS = [0.0, 0.0, -0.0048]
+SOFT_DOME_HOUSING_SIZE = [0.012001, 0.001001]
 SRDF_CLOSE_M = 0.032
 
 # 原始网格名 -> 仓库规范 ASCII 小写网格名（不含 .stl 后缀）
@@ -573,6 +583,133 @@ def _copy_paxini_meshes(paxini_export_dir: Path, out_meshes_dir: Path) -> None:
         if not src.is_file():
             raise FileNotFoundError(f"缺少 PaXini 导出网格文件: {src}")
         shutil.copy2(src, sub_dir / fname)
+
+
+def _write_indexed_stl(
+    stl_path: Path,
+    header_text: str,
+    vertices: np.ndarray,
+    faces: list[tuple[int, int, int]],
+) -> None:
+    """按共享顶点索引确定性写出闭合二进制 STL，确保相邻三角边精确共享同一 float32 坐标。"""
+    verts_f32 = np.asarray(vertices, dtype=np.float32)
+    header = header_text.encode("ascii")[:80].ljust(80, b"\0")
+    chunks = [struct.pack("<80sI", header, len(faces))]
+    for i0, i1, i2 in faces:
+        v0, v1, v2 = verts_f32[i0], verts_f32[i1], verts_f32[i2]
+        normal = np.cross(
+            v1.astype(np.float64) - v0.astype(np.float64),
+            v2.astype(np.float64) - v0.astype(np.float64),
+        )
+        norm = float(np.linalg.norm(normal))
+        if norm > 0.0:
+            normal /= norm
+        chunks.append(
+            struct.pack(
+                "<12fH",
+                float(normal[0]),
+                float(normal[1]),
+                float(normal[2]),
+                float(v0[0]),
+                float(v0[1]),
+                float(v0[2]),
+                float(v1[0]),
+                float(v1[1]),
+                float(v1[2]),
+                float(v2[0]),
+                float(v2[1]),
+                float(v2[2]),
+                0,
+            )
+        )
+    stl_path.parent.mkdir(parents=True, exist_ok=True)
+    stl_path.write_bytes(b"".join(chunks))
+
+
+def _generate_soft_dome_meshes(out_meshes_dir: Path) -> tuple[Path, Path]:
+    """程序化生成 soft_dome 薄圆柱转接底座与扁球冠（半球为 h=R 特例）闭合流形二进制 STL。"""
+    sub_dir = out_meshes_dir / "soft_dome"
+    sub_dir.mkdir(parents=True, exist_ok=True)
+    base_stl = sub_dir / "soft_dome_base.stl"
+    dome_stl = sub_dir / "soft_dome.stl"
+
+    # 1. 薄圆柱转接底座：直径 24 mm（半径 12 mm），z 从指腹安装面 -5.8 mm 延伸至 -3.8 mm（厚 2.0 mm）
+    n_lon = 48
+    ring_xy = [
+        (
+            SOFT_DOME_BASE_RADIUS_M * math.cos(2.0 * math.pi * k / n_lon),
+            SOFT_DOME_BASE_RADIUS_M * math.sin(2.0 * math.pi * k / n_lon),
+        )
+        for k in range(n_lon)
+    ]
+    z0, z1 = SOFT_DOME_BACK_Z_M, SOFT_DOME_BASE_FRONT_Z_M
+    base_verts = (
+        [[x, y, z0] for x, y in ring_xy]
+        + [[x, y, z1] for x, y in ring_xy]
+        + [[0.0, 0.0, z0], [0.0, 0.0, z1]]
+    )
+    n_ring = len(ring_xy)
+    bot_center, top_center = 2 * n_ring, 2 * n_ring + 1
+    base_faces: list[tuple[int, int, int]] = []
+    for k in range(n_ring):
+        k1 = (k + 1) % n_ring
+        base_faces.append((bot_center, k1, k))
+        base_faces.append((top_center, n_ring + k, n_ring + k1))
+        base_faces.append((k, k1, n_ring + k1))
+        base_faces.append((k, n_ring + k1, n_ring + k))
+    _write_indexed_stl(
+        base_stl, "adaptive_tactile_gripper soft_dome_base", np.array(base_verts), base_faces
+    )
+
+    # 2. 硅胶扁球冠：球心 (0, 0, z_c)，曲率半径 R = 12 mm，截取 z in [z1, tip]（h_cap = R 时退化为半球）
+    cap_height = SOFT_DOME_TIP_PROTRUSION_M - z1
+    if not (0.0 < cap_height <= SOFT_DOME_RADIUS_M):
+        raise ValueError(
+            f"soft_dome 冠高 {cap_height} m 必须满足 0 < h <= R ({SOFT_DOME_RADIUS_M} m)"
+        )
+    cos_max = (z1 - SOFT_DOME_SPHERE_CENTER_Z_M) / SOFT_DOME_RADIUS_M
+    theta_max = math.acos(max(-1.0, min(1.0, cos_max)))
+    n_lat = 18
+    dome_verts: list[list[float]] = [[0.0, 0.0, SOFT_DOME_TIP_PROTRUSION_M]]
+    for r_idx in range(1, n_lat + 1):
+        if r_idx == n_lat:
+            z_ring = z1
+            rad_ring = math.sqrt(
+                max(0.0, SOFT_DOME_RADIUS_M**2 - (z1 - SOFT_DOME_SPHERE_CENTER_Z_M) ** 2)
+            )
+        else:
+            theta = theta_max * (r_idx / n_lat)
+            z_ring = SOFT_DOME_SPHERE_CENTER_Z_M + SOFT_DOME_RADIUS_M * math.cos(theta)
+            rad_ring = SOFT_DOME_RADIUS_M * math.sin(theta)
+        for j in range(n_lon):
+            phi = 2.0 * math.pi * j / n_lon
+            dome_verts.append([rad_ring * math.cos(phi), rad_ring * math.sin(phi), z_ring])
+    dome_bot_center = len(dome_verts)
+    dome_verts.append([0.0, 0.0, z1])
+
+    dome_faces: list[tuple[int, int, int]] = []
+    for j in range(n_lon):
+        j1 = (j + 1) % n_lon
+        dome_faces.append((0, 1 + j, 1 + j1))
+    for r_idx in range(1, n_lat):
+        b0 = 1 + (r_idx - 1) * n_lon
+        b1 = 1 + r_idx * n_lon
+        for j in range(n_lon):
+            j1 = (j + 1) % n_lon
+            dome_faces.append((b0 + j, b1 + j, b1 + j1))
+            dome_faces.append((b0 + j, b1 + j1, b0 + j1))
+    bn = 1 + (n_lat - 1) * n_lon
+    for j in range(n_lon):
+        j1 = (j + 1) % n_lon
+        dome_faces.append((dome_bot_center, bn + j1, bn + j))
+    _write_indexed_stl(
+        dome_stl, "adaptive_tactile_gripper soft_dome", np.array(dome_verts), dome_faces
+    )
+
+    for stl_path in (base_stl, dome_stl):
+        _assert_closed_manifold_stl(stl_path)
+        _stl_polyhedral_props(stl_path)
+    return base_stl, dome_stl
 
 
 def _rename_mesh_refs(elem: ET.Element) -> None:
@@ -1106,6 +1243,160 @@ def _build_paxini_m2824_mjcf(
         {
             "paxini_m2824": "paxini_m2824/paxini_m2824.stl",
             "paxini_m2824_adapter": "paxini_m2824/paxini_m2824_adapter.stl",
+        },
+    )
+    _write_xml(root, out_path)
+    return total_mass
+
+
+def _build_soft_dome_mjcf(
+    appearance: Appearance,
+    meshes_dir: Path,
+    rho_placf: float,
+    out_path: Path,
+) -> float:
+    """生成硅胶扁球冠六轴 F/T 模组 mjcf/sensors/soft_dome.xml（球面碰撞代理 + 扁球冠视觉网格）。"""
+    root = ET.Element("mujoco", {"model": "soft_dome"})
+    ET.SubElement(
+        root, "compiler", {"angle": "radian", "meshdir": "../../meshes", "autolimits": "true"}
+    )
+    root.append(_build_default_section(for_chassis=False))
+    worldbody = ET.SubElement(root, "worldbody")
+    body = ET.SubElement(
+        worldbody,
+        "body",
+        {
+            "name": "sensor_body",
+            "pos": "0 0 0",
+            "quat": "1 0 0 0",
+            "childclass": "parallel_gripper",
+        },
+    )
+
+    base_stl = meshes_dir / "soft_dome" / "soft_dome_base.stl"
+    dome_stl = meshes_dir / "soft_dome" / "soft_dome.stl"
+    base_part = _part_from_mesh(
+        "soft_dome_base",
+        base_stl,
+        [0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0, 0.0],
+        density_kg_m3=rho_placf,
+    )
+    dome_part = _part_from_mesh(
+        "soft_dome",
+        dome_stl,
+        [0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0, 0.0],
+        density_kg_m3=SOFT_DOME_SILICONE_DENSITY_KG_M3,
+    )
+    m_ft = SOFT_DOME_TRANSDUCER_MASS_KG
+    r_ft, h_ft = 0.009, 0.002
+    transducer_part = _point_part(
+        "soft_dome_ft_core",
+        m_ft,
+        [0.0, 0.0, -0.0048],
+        [
+            m_ft * (3.0 * r_ft**2 + h_ft**2) / 12.0,
+            m_ft * (3.0 * r_ft**2 + h_ft**2) / 12.0,
+            0.5 * m_ft * r_ft**2,
+        ],
+    )
+    total_mass, com, I_mat = _combine_inertials([base_part, dome_part, transducer_part])
+    _set_inertial_element(body, total_mass, com, I_mat)
+
+    for mesh_name in ("soft_dome_base", "soft_dome"):
+        ET.SubElement(
+            body,
+            "geom",
+            {
+                "type": "mesh",
+                "class": "visual",
+                "pos": "0 0 0",
+                "quat": "1 0 0 0",
+                "mesh": mesh_name,
+            },
+        )
+
+    ET.SubElement(
+        body,
+        "geom",
+        {
+            "name": "sensor_housing_collision",
+            "class": "collision",
+            "type": "cylinder",
+            "pos": _fmt_vec(SOFT_DOME_HOUSING_POS),
+            "size": _fmt_vec(SOFT_DOME_HOUSING_SIZE),
+            "contype": "4",
+            "conaffinity": "1",
+        },
+    )
+
+    sphere_center = [0.0, 0.0, SOFT_DOME_SPHERE_CENTER_Z_M]
+    ET.SubElement(
+        body,
+        "geom",
+        {
+            "name": "pad_collision",
+            "type": "sphere",
+            "class": "pillar_collision",
+            "pos": _fmt_vec(sphere_center),
+            "size": _fmt_vec([SOFT_DOME_RADIUS_M]),
+            "condim": "4",
+            "friction": "0.8 0.0064 0.0001",
+            "solref": "-4800 -24",
+            "solimp": "0.75 0.97 0.002 0.5 2",
+        },
+    )
+
+    c_h = np.asarray(SOFT_DOME_HOUSING_POS)
+    r_h, hz_h = SOFT_DOME_HOUSING_SIZE
+    c_s = np.asarray(sphere_center)
+    base_verts = _stl_triangles(base_stl).reshape(-1, 3)
+    base_radial = np.hypot(base_verts[:, 0] - c_h[0], base_verts[:, 1] - c_h[1])
+    if not bool(
+        np.all((base_radial <= r_h + 1e-8) & (np.abs(base_verts[:, 2] - c_h[2]) <= hz_h + 1e-8))
+    ):
+        raise ValueError("soft_dome_base.stl 存在超出圆柱底座碰撞包络的顶点")
+    dome_verts = _stl_triangles(dome_stl).reshape(-1, 3)
+    if not bool(np.all(np.linalg.norm(dome_verts - c_s, axis=1) <= SOFT_DOME_RADIUS_M + 1e-7)):
+        raise ValueError("soft_dome.stl 存在超出球面碰撞体包络的顶点")
+
+    ET.SubElement(
+        body,
+        "site",
+        {
+            "group": "3",
+            "name": "pad_center",
+            "pos": _fmt_vec([0, 0, SOFT_DOME_TIP_PROTRUSION_M]),
+            "quat": "0 1 0 0",
+        },
+    )
+    ET.SubElement(
+        body,
+        "site",
+        {
+            "group": "3",
+            "name": "ft_sensor",
+            "pos": _fmt_vec([0, 0, SOFT_DOME_BASE_FRONT_Z_M]),
+            "quat": "0 1 0 0",
+        },
+    )
+    ET.SubElement(
+        body,
+        "site",
+        {
+            "name": "fingertip",
+            "group": "4",
+            "pos": _fmt_vec([0, 0, SOFT_DOME_TIP_PROTRUSION_M]),
+        },
+    )
+
+    _add_visual_assets(
+        root,
+        appearance,
+        {
+            "soft_dome": "soft_dome/soft_dome.stl",
+            "soft_dome_base": "soft_dome/soft_dome_base.stl",
         },
     )
     _write_xml(root, out_path)
@@ -1723,6 +2014,7 @@ def _assemble_single_mjcf(
             "pts_2_0": TIP_PROTRUSION_M,
             "flat_pad": TIP_PROTRUSION_M,
             "paxini_m2824": PAXINI_M2824_TIP_PROTRUSION_M,
+            "soft_dome": SOFT_DOME_TIP_PROTRUSION_M,
         }
         contact_slide = (
             FULL_OPEN_MOUNT_GAP_M
@@ -1839,6 +2131,7 @@ def _build_urdf_xacros(
     pts_xml: Path,
     flat_xml: Path,
     paxini_xml: Path,
+    soft_dome_xml: Path,
     camera_xml: Path,
     urdf_dir: Path,
     srdf_dir: Path,
@@ -1923,7 +2216,7 @@ def _build_urdf_xacros(
             elif shape == "cylinder":
                 geometry = (
                     f'<cylinder radius="${{{number(dims[0])} + safety_distance}}" '
-                    f'length="${{{number(2 * dims[1])} + 2 * safety_distance}}"/>'
+                    f'length="${{{number(2 * dims[1])} + {1 if pad_back else 2} * safety_distance}}"/>'
                 )
             elif shape == "sphere":
                 geometry = f'<sphere radius="{number(dims[0])}"/>'
@@ -1971,7 +2264,12 @@ def _build_urdf_xacros(
 """
     xml_end = "  </xacro:macro>\n</robot>\n"
 
-    for name, path in (("pts_2_0", pts_xml), ("flat_pad", flat_xml), ("paxini_m2824", paxini_xml)):
+    for name, path in (
+        ("pts_2_0", pts_xml),
+        ("flat_pad", flat_xml),
+        ("paxini_m2824", paxini_xml),
+        ("soft_dome", soft_dome_xml),
+    ):
         root = ET.parse(path).getroot()
         body = root.find("worldbody/body")
         body_pose = pose(body)
@@ -2129,6 +2427,7 @@ def _build_urdf_xacros(
   <xacro:include filename="$(find {PACKAGE_NAME})/urdf/sensors/pts_2_0.xacro"/>
   <xacro:include filename="$(find {PACKAGE_NAME})/urdf/sensors/flat_pad.xacro"/>
   <xacro:include filename="$(find {PACKAGE_NAME})/urdf/sensors/paxini_m2824.xacro"/>
+  <xacro:include filename="$(find {PACKAGE_NAME})/urdf/sensors/soft_dome.xacro"/>
   <xacro:include filename="$(find {PACKAGE_NAME})/urdf/accessories/realsense_d435i.xacro"/>
 
   <!-- 顶层可配置夹爪宏：支持左右传感器独立替换与相机可选挂载 -->
@@ -2149,6 +2448,9 @@ def _build_urdf_xacros(
     <xacro:if value="${{left_sensor == 'paxini_m2824'}}">
       <xacro:paxini_m2824_sensor prefix="${{ns}}_left" parent="${{ns}}_left_sensor_mount" safety_distance="${{safety_distance}}"/>
     </xacro:if>
+    <xacro:if value="${{left_sensor == 'soft_dome'}}">
+      <xacro:soft_dome_sensor prefix="${{ns}}_left" parent="${{ns}}_left_sensor_mount" safety_distance="${{safety_distance}}"/>
+    </xacro:if>
 
     <xacro:if value="${{right_sensor == 'pts_2_0'}}">
       <xacro:pts_2_0_sensor prefix="${{ns}}_right" parent="${{ns}}_right_sensor_mount" safety_distance="${{safety_distance}}"/>
@@ -2158,6 +2460,9 @@ def _build_urdf_xacros(
     </xacro:if>
     <xacro:if value="${{right_sensor == 'paxini_m2824'}}">
       <xacro:paxini_m2824_sensor prefix="${{ns}}_right" parent="${{ns}}_right_sensor_mount" safety_distance="${{safety_distance}}"/>
+    </xacro:if>
+    <xacro:if value="${{right_sensor == 'soft_dome'}}">
+      <xacro:soft_dome_sensor prefix="${{ns}}_right" parent="${{ns}}_right_sensor_mount" safety_distance="${{safety_distance}}"/>
     </xacro:if>
 
     <xacro:if value="${{with_camera}}">
@@ -2216,7 +2521,7 @@ def _build_urdf_xacros(
         chassis_links, "link"
     )
     for side in ("left", "right"):
-        srdf_xacro += f"""      <xacro:if value="${{{side}_sensor in ('pts_2_0', 'flat_pad', 'paxini_m2824')}}">
+        srdf_xacro += f"""      <xacro:if value="${{{side}_sensor in ('pts_2_0', 'flat_pad', 'paxini_m2824', 'soft_dome')}}">
 """
         srdf_xacro += group_members([f"{side}_sensor_joint", f"{side}_fingertip_joint"], "joint", 8)
         srdf_xacro += group_members([f"{side}_sensor_link", f"{side}_fingertip"], "link", 8)
@@ -2279,11 +2584,11 @@ def _build_urdf_xacros(
       <disable_collisions link1="${ns}_camera_mount_link" link2="${ns}_right_finger" reason="Never"/>
     </xacro:if>
 
-    <xacro:if value="${left_sensor in ('pts_2_0', 'flat_pad', 'paxini_m2824')}">
+    <xacro:if value="${left_sensor in ('pts_2_0', 'flat_pad', 'paxini_m2824', 'soft_dome')}">
       <disable_collisions link1="${ns}_left_finger" link2="${ns}_left_sensor_link" reason="Adjacent"/>
       <disable_collisions link1="${ns}_base" link2="${ns}_left_sensor_link" reason="Adjacent"/>
     </xacro:if>
-    <xacro:if value="${right_sensor in ('pts_2_0', 'flat_pad', 'paxini_m2824')}">
+    <xacro:if value="${right_sensor in ('pts_2_0', 'flat_pad', 'paxini_m2824', 'soft_dome')}">
       <disable_collisions link1="${ns}_right_finger" link2="${ns}_right_sensor_link" reason="Adjacent"/>
       <disable_collisions link1="${ns}_base" link2="${ns}_right_sensor_link" reason="Adjacent"/>
     </xacro:if>
@@ -2316,6 +2621,7 @@ def _write_specs(
     taxels_spec: list[dict[str, object]],
     paxini_mass_kg: float,
     paxini_taxels: list[dict[str, object]],
+    soft_dome_mass_kg: float,
     phi_print: float,
     rho_pla: float,
     rho_placf: float,
@@ -2540,6 +2846,54 @@ contact:
         "\n".join(paxini_lines) + "\n", encoding="utf-8"
     )
 
+    soft_dome_mesh_hashes = "\n".join(
+        f'  {path.name}: "{hashlib.sha256(path.read_bytes()).hexdigest()}"'
+        for path in sorted((meshes_dir / "soft_dome").glob("*.stl"))
+    )
+    cap_height_m = round(SOFT_DOME_TIP_PROTRUSION_M - SOFT_DOME_BASE_FRONT_Z_M, 6)
+    cap_base_radius_m = round(
+        math.sqrt(
+            SOFT_DOME_RADIUS_M**2 - (SOFT_DOME_BASE_FRONT_Z_M - SOFT_DOME_SPHERE_CENTER_Z_M) ** 2
+        ),
+        9,
+    )
+    base_thickness_m = round(SOFT_DOME_BASE_FRONT_Z_M - SOFT_DOME_BACK_Z_M, 6)
+    soft_dome_yaml = f"""# 硅胶扁球冠六轴力/力矩指尖模组规格（2.0 mm 薄圆柱底座 + 7.5 mm 球冠，曲率半径 R=12 mm）
+name: soft_dome
+kind: tactile_6axis_dome
+mass_kg: {round(soft_dome_mass_kg, 6)}
+# 球冠顶点沿安装系 +Z 位于 3.7 mm（距指腹安装面总高 9.5 mm）；半球对应冠高 h=R 特例。
+thickness_to_tip_m: {SOFT_DOME_TIP_PROTRUSION_M}
+opposing_tip_stop: true
+dome_geometry:
+  curvature_radius_m: {SOFT_DOME_RADIUS_M}
+  cap_height_m: {cap_height_m}
+  cap_base_radius_m: {cap_base_radius_m}
+  base_radius_m: {SOFT_DOME_BASE_RADIUS_M}
+  base_thickness_m: {base_thickness_m}
+  base_front_z_m: {SOFT_DOME_BASE_FRONT_Z_M}
+  sphere_center_in_sensor_mount_m: [0.0, 0.0, {SOFT_DOME_SPHERE_CENTER_Z_M}]
+mesh_sha256:
+{soft_dome_mesh_hashes}
+tactile:
+  mode: pad_wrench
+  left_pad_geom: left_pad_collision
+  right_pad_geom: right_pad_collision
+  left_site: left_pad_center
+  right_site: right_pad_center
+  left_base_site: left_ft_sensor
+  right_base_site: right_ft_sensor
+  site_quat_in_sensor_mount_wxyz: [0, 1, 0, 0]
+contact:
+  condim: 4
+  friction_coefficient: 0.8
+  torsional_friction: 0.0064
+  rolling_friction: 0.0001
+  solref: [-4800.0, -24.0]
+  solimp: [0.75, 0.97, 0.002, 0.5, 2.0]
+"""
+    (config_dir / "sensors" / "soft_dome.yaml").write_text(soft_dome_yaml, encoding="utf-8")
+
 
 def build_all(
     export_dir: Path,
@@ -2561,6 +2915,7 @@ def build_all(
     palette = Appearance.from_library(_build_appearance_library(raw_root, out_root), appearance)
     _copy_and_rename_meshes(raw_root, raw_assets, meshes_dir)
     _copy_paxini_meshes(paxini_export_dir, meshes_dir)
+    _generate_soft_dome_meshes(meshes_dir)
 
     phi_print, rho_pla, rho_placf = _solve_print_fill_ratio(raw_root, meshes_dir)
 
@@ -2569,6 +2924,7 @@ def build_all(
     pts_path = mjcf_dir / "sensors" / "pts_2_0.xml"
     flat_path = mjcf_dir / "sensors" / "flat_pad.xml"
     paxini_path = mjcf_dir / "sensors" / "paxini_m2824.xml"
+    soft_dome_path = mjcf_dir / "sensors" / "soft_dome.xml"
     cam_path = mjcf_dir / "accessories" / "realsense_d435i.xml"
 
     chassis_masses = _build_chassis_mjcf(
@@ -2579,6 +2935,7 @@ def build_all(
     paxini_mass_kg = _build_paxini_m2824_mjcf(
         palette, meshes_dir, rho_placf, paxini_taxels, paxini_path
     )
+    soft_dome_mass_kg = _build_soft_dome_mjcf(palette, meshes_dir, rho_placf, soft_dome_path)
     cam_info = _build_realsense_d435i_mjcf(raw_root, palette, meshes_dir, rho_placf, cam_path)
 
     full_xml = mjcf_dir / "gripper.xml"
@@ -2596,6 +2953,7 @@ def build_all(
         pts_path,
         flat_path,
         paxini_path,
+        soft_dome_path,
         cam_path,
         out_root / "urdf",
         out_root / "srdf",
@@ -2604,6 +2962,7 @@ def build_all(
         taxels_spec,
         paxini_mass_kg,
         paxini_taxels,
+        soft_dome_mass_kg,
         phi_print,
         rho_pla,
         rho_placf,

@@ -1,0 +1,34 @@
+# 硅胶扁球冠六轴力/力矩指尖模组规格（2.0 mm 薄圆柱底座 + 7.5 mm 球冠，曲率半径 R=12 mm）
+name: soft_dome
+kind: tactile_6axis_dome
+mass_kg: 0.008663
+# 球冠顶点沿安装系 +Z 位于 3.7 mm（距指腹安装面总高 9.5 mm）；半球对应冠高 h=R 特例。
+thickness_to_tip_m: 0.0037
+opposing_tip_stop: true
+dome_geometry:
+  curvature_radius_m: 0.012
+  cap_height_m: 0.0075
+  cap_base_radius_m: 0.011124298
+  base_radius_m: 0.012
+  base_thickness_m: 0.002
+  base_front_z_m: -0.0038
+  sphere_center_in_sensor_mount_m: [0.0, 0.0, -0.0083]
+mesh_sha256:
+  soft_dome.stl: "1daae2f31d04dfa407e454ac77088dd73f90d5a35cfc800f8e2710e2b9c186d1"
+  soft_dome_base.stl: "cf66bbc4d5c0419b2032c8bb9ece52f847e615480d38abea5f929f918e57e16c"
+tactile:
+  mode: pad_wrench
+  left_pad_geom: left_pad_collision
+  right_pad_geom: right_pad_collision
+  left_site: left_pad_center
+  right_site: right_pad_center
+  left_base_site: left_ft_sensor
+  right_base_site: right_ft_sensor
+  site_quat_in_sensor_mount_wxyz: [0, 1, 0, 0]
+contact:
+  condim: 4
+  friction_coefficient: 0.8
+  torsional_friction: 0.0064
+  rolling_friction: 0.0001
+  solref: [-4800.0, -24.0]
+  solimp: [0.75, 0.97, 0.002, 0.5, 2.0]

@@ -114,7 +114,9 @@ def get_tactile_layout(
     `prefix` 可传入挂载前缀（如 `gripper/`），各测点位置以 `sensor_mount` 表达：
     - `mode == "contact_geom"`（如 `pts_2_0`）：每个 `taxels` 元素含独立碰撞体 `geom_name` 与 `site_name`；
     - `mode == "pad_sites"`（如 `paxini_m2824`）：整块平垫共用顶层 `pad_geom_name`（显式 `<pair>` 仅可对该
-      `pad_geom_name` 注册一次，切勿按测点重复注册），每个 `taxels` 元素含测点 `id`、`pos_m` 与 `site_name`。
+      `pad_geom_name` 注册一次，切勿按测点重复注册），每个 `taxels` 元素含测点 `id`、`pos_m` 与 `site_name`；
+    - `mode == "pad_wrench"`（如 `soft_dome`）：单个柔顺球冠/垫块碰撞体 `pad_geom_name` 配接触面参考系
+      `site_name`（及可选底座量测中心 `base_site_name`），用于六轴接触力/抗扭力矩（Wrench）读取。
     """
     layout = {}
     for side, name in (("left", left_sensor), ("right", right_sensor)):
@@ -122,6 +124,16 @@ def get_tactile_layout(
         tactile = sensor["tactile"] if sensor is not None else None
         if sensor is None or tactile is None:
             layout[side] = None
+            continue
+        if tactile["mode"] == "pad_wrench":
+            base_key = f"{side}_base_site"
+            layout[side] = {
+                "mode": "pad_wrench",
+                "pad_geom_name": prefix + tactile[f"{side}_pad_geom"],
+                "site_name": prefix + tactile[f"{side}_site"],
+                "base_site_name": (prefix + tactile[base_key] if tactile.get(base_key) else None),
+                "site_quat_in_sensor_mount_wxyz": tactile["site_quat_in_sensor_mount_wxyz"],
+            }
             continue
         site_prefix = prefix + tactile[f"{side}_site_prefix"]
         if tactile["mode"] == "pad_sites":
@@ -244,7 +256,7 @@ def _add_module_contact_exclusions(
         spec.add_exclude(bodyname1="base", bodyname2="cam_camera_assembly")
 
 
-_OVERLAPPING_TIP_SENSORS = frozenset({"pts_2_0", "flat_pad", "paxini_m2824"})
+_OVERLAPPING_TIP_SENSORS = frozenset({"pts_2_0", "flat_pad", "paxini_m2824", "soft_dome"})
 
 
 def _contact_slide_if_configured(
@@ -297,7 +309,7 @@ def build_gripper_spec(
     """按参数模块化组装夹爪 MuJoCo MjSpec。
 
     参数
-        left_sensor: 左指传感器模组名（如 ``pts_2_0``、``flat_pad``、``paxini_m2824``），``None`` 或 ``"none"`` 不挂传感器。
+        left_sensor: 左指传感器模组名（如 ``pts_2_0``、``flat_pad``、``paxini_m2824``、``soft_dome``），``None`` 或 ``"none"`` 不挂传感器。
         right_sensor: 右指传感器模组名，语义同 ``left_sensor``。
         appearance: 外观预设名；省略时沿用资产自带的材质。
         with_camera: 是否挂载侧置 RealSense D435i 支架与相机。

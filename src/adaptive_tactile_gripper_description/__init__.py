@@ -15,12 +15,13 @@ from .assembly import (
     list_sensors,
 )
 from .kinematics import get_closure_jacobian, get_joint_positions
-from .tactile import TactileForceReader, add_tactile_contact_pairs
+from .tactile import TactileForceReader, TactileWrenchReader, add_tactile_contact_pairs
 
 __version__ = "0.2.0"
 
 __all__ = [
     "TactileForceReader",
+    "TactileWrenchReader",
     "add_tactile_contact_pairs",
     "build_gripper_spec",
     "get_closure_jacobian",

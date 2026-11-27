@@ -8,7 +8,7 @@ DM4310 曲柄滑块夹爪的统一描述包，从同一份 Onshape B1 装配生�
 
 ## 特性
 
-- 左右指尖可独立选用九触点 PTS 2.0、135 测点 PaXini M2824、平垫或空载，侧置 D435i 可拆卸。
+- 左右指尖可独立选用九触点 PTS 2.0、135 测点 PaXini M2824、六轴 F/T 柔性球冠 `soft_dome`、平垫或空载，侧置 D435i 可拆卸。
 - MuJoCo 描述闭环、回差与触觉碰撞，Xacro 与 SRDF 提供 MoveIt 2 规划接口。
 - 真机与 CAD 外观支持按实例切换，共享机构、质量和碰撞参数。
 
@@ -71,6 +71,10 @@ uv run atg-description render
 ### PaXini M2824 安装、零间隙闭合与 135 测点示意
 
 ![PaXini M2824 安装与 135 测点碰撞示意](docs/images/paxini_m2824_mounting.png)
+
+### `soft_dome` 柔性扁球冠安装与六轴 F/T 球面碰撞示意
+
+![soft_dome 柔性球冠安装与六轴参考系示意](docs/images/soft_dome_mounting.png)
 
 ### 闭环曲柄滑块对称闭合序列
 

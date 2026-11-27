@@ -40,6 +40,7 @@ def test_package_discovery_and_specs():
     assert "pts_2_0" in list_sensors()
     assert "flat_pad" in list_sensors()
     assert "paxini_m2824" in list_sensors()
+    assert "soft_dome" in list_sensors()
     assert "realsense_d435i" in list_accessories()
 
     specs = get_specs()
@@ -63,6 +64,14 @@ def test_package_discovery_and_specs():
     assert paxini["tactile"]["count"] == 135
     assert len(paxini["taxels_in_sensor_mount"]) == 135
     assert math.isclose(paxini["thickness_to_tip_m"], 0.0037, abs_tol=1e-9)
+
+    dome = get_sensor_spec("soft_dome")
+    assert dome["tactile"]["mode"] == "pad_wrench"
+    assert math.isclose(dome["thickness_to_tip_m"], 0.0037, abs_tol=1e-9)
+    assert math.isclose(dome["dome_geometry"]["curvature_radius_m"], 0.012, abs_tol=1e-9)
+    assert math.isclose(dome["dome_geometry"]["cap_height_m"], 0.0075, abs_tol=1e-9)
+    assert math.isclose(dome["dome_geometry"]["base_thickness_m"], 0.002, abs_tol=1e-9)
+    assert dome["contact"]["condim"] == 4
 
 
 def test_mass_budget_matches_686g_and_no_double_counting():
@@ -98,6 +107,8 @@ def test_prebuilt_and_modular_mjcf_compile():
         ("flat_pad", "flat_pad", True),
         ("paxini_m2824", "paxini_m2824", True),
         ("pts_2_0", "paxini_m2824", False),
+        ("soft_dome", "soft_dome", True),
+        ("pts_2_0", "soft_dome", False),
         (None, None, False),
     ]
     for left, right, cam in combos:
@@ -128,6 +139,13 @@ def test_prebuilt_and_modular_mjcf_compile():
                 assert m.site(f"{side}_pad_center").id >= 0
                 assert m.site(f"{side}_taxel_001").id >= 0
                 assert m.site(f"{side}_taxel_135").id >= 0
+            elif sensor_name == "soft_dome":
+                gid = m.geom(f"{side}_pad_collision").id
+                assert m.geom_type[gid] == mujoco.mjtGeom.mjGEOM_SPHERE
+                assert math.isclose(float(m.geom_size[gid, 0]), 0.012, abs_tol=1e-9)
+                assert int(m.geom_condim[gid]) == 4
+                assert m.site(f"{side}_pad_center").id >= 0
+                assert m.site(f"{side}_ft_sensor").id >= 0
 
 
 def test_taxel_poses_match_onshape_export():

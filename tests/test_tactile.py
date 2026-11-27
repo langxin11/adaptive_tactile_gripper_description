@@ -11,6 +11,7 @@ import pytest
 
 from adaptive_tactile_gripper_description import (
     TactileForceReader,
+    TactileWrenchReader,
     add_tactile_contact_pairs,
     build_gripper_spec,
     tactile,
@@ -89,6 +90,11 @@ def test_tactile_type_annotations():
     assert get_type_hints(TactileForceReader.__init__)["model"] is mujoco.MjModel
     assert get_type_hints(TactileForceReader.read)["data"] is mujoco.MjData
     assert get_type_hints(TactileForceReader.__init__)["target_geoms"] == (
+        str | int | np.integer[Any] | Sequence[str | int | np.integer[Any]] | None
+    )
+    assert get_type_hints(TactileWrenchReader.__init__)["model"] is mujoco.MjModel
+    assert get_type_hints(TactileWrenchReader.read)["data"] is mujoco.MjData
+    assert get_type_hints(TactileWrenchReader.__init__)["target_geoms"] == (
         str | int | np.integer[Any] | Sequence[str | int | np.integer[Any]] | None
     )
 
@@ -1331,6 +1337,7 @@ def test_paxini_rejects_disabled_nativeccd_instead_of_dropping_load():
     [
         ("pts_2_0", "pts_2_0", 0.003),
         ("paxini_m2824", "paxini_m2824", 0.002),
+        ("soft_dome", "soft_dome", 0.002),
     ],
 )
 def test_opposing_tip_stop_does_not_divert_thin_object_grip_force(
@@ -1354,7 +1361,10 @@ def test_opposing_tip_stop_does_not_divert_thin_object_grip_force(
             pos=[0.0, 0.0, 0.14555],
             size=[thickness_m / 2.0, 0.012, 0.012],
         )
-        if "paxini_m2824" in (left_sensor, right_sensor):
+        if "paxini_m2824" in (left_sensor, right_sensor) or "soft_dome" in (
+            left_sensor,
+            right_sensor,
+        ):
             add_tactile_contact_pairs(
                 spec, "thin_plate", left_sensor=left_sensor, right_sensor=right_sensor
             )
@@ -1378,3 +1388,264 @@ def test_opposing_tip_stop_does_not_divert_thin_object_grip_force(
     without_stop = _steady_normal_force(keep_stop=False)
     assert with_stop > 50.0
     assert with_stop == pytest.approx(without_stop, rel=1e-4, abs=1e-2)
+
+
+def test_soft_dome_six_axis_wrench_conservation_torsion_and_frame_shift():
+    """验证 soft_dome 单点球面接触：三维力 + 抗扭扭矩六轴精确守恒，且 pad_center 与 ft_sensor 满足力臂平移关系。"""
+    scene = _attach_gripper_and_box(left_sensor="soft_dome", right_sensor="soft_dome")
+    scene.option.cone = mujoco.mjtCone.mjCONE_ELLIPTIC
+    added = add_tactile_contact_pairs(
+        scene,
+        "cube/target_cube_geom",
+        left_sensor="soft_dome",
+        right_sensor="soft_dome",
+        prefix="gripper/",
+    )
+    assert added == ["tactile_object_left_0", "tactile_object_right_0"]
+    # 验证 soft_dome 默认显式接触对使用 condim=4（含抗扭摩擦力矩）与声明的扭转摩擦系数。
+    for pair_name in added:
+        pair = next(p for p in scene.pairs if p.name == pair_name)
+        assert pair.condim == 4
+        np.testing.assert_allclose(pair.friction[:3], [0.8, 0.8, 0.0064], atol=1e-9)
+
+    model = scene.compile()
+    data = mujoco.MjData(model)
+    wrench_pad = TactileWrenchReader(
+        model,
+        left_sensor="soft_dome",
+        right_sensor="soft_dome",
+        prefix="gripper/",
+        frame="pad_center",
+        target_geoms="cube/target_cube_geom",
+    )
+    wrench_ft = TactileWrenchReader(
+        model,
+        left_sensor="soft_dome",
+        right_sensor="soft_dome",
+        prefix="gripper/",
+        frame="ft_sensor",
+        target_geoms="cube/target_cube_geom",
+    )
+    force_reader = TactileForceReader(
+        model,
+        left_sensor="soft_dome",
+        right_sensor="soft_dome",
+        prefix="gripper/",
+        target_geoms="cube/target_cube_geom",
+    )
+    assert wrench_pad.frame == "pad_center"
+    assert wrench_ft.frame == "ft_sensor"
+    assert wrench_pad.site_id("left") == model.site("gripper/left_pad_center").id
+    assert wrench_ft.site_id("left") == model.site("gripper/left_ft_sensor").id
+
+    cube_bid = model.body("cube_body").id
+    cube_gid = model.geom("cube/target_cube_geom").id
+    data.ctrl[0] = 0.35
+    for step in range(900):
+        if step >= 300:
+            # 同时施加三维外力 + 绕夹持闭合轴 X 的扭转力矩 + 绕 Y 的偏载弯矩。
+            data.xfrc_applied[cube_bid, :] = [0.0, 0.45, -0.75, 0.024, 0.004, 0.0]
+        else:
+            data.xfrc_applied[cube_bid, :] = 0.0
+        mujoco.mj_step(model, data)
+
+    # 球面与长方体平面在每侧严格只产生 1 个光滑接触点（Limit Surface 单斑块前提）。
+    cube_contacts = [c for c in data.contact[: data.ncon] if cube_gid in (c.geom1, c.geom2)]
+    assert len(cube_contacts) == 2
+    assert all(c.dim == 4 for c in cube_contacts)
+
+    w_pad = wrench_pad.read(data)
+    w_ft = wrench_ft.read(data)
+    f_only = force_reader.read(data)
+    w_via_force_reader = force_reader.read_wrench(data, frame="pad_center")
+    w_ft_via_force_reader = force_reader.read_wrench(data, frame="ft_sensor")
+
+    cube_com = np.asarray(data.xipos[cube_bid], dtype=np.float64)
+    net_force_on_pads_w = np.zeros(3)
+    net_moment_about_com_w = np.zeros(3)
+    for side in ("left", "right"):
+        wp = w_pad[side]
+        wf = w_ft[side]
+        fo = f_only[side]
+        assert wp is not None and wf is not None and fo is not None
+        assert wp.shape == (6,) and wf.shape == (6,) and fo.shape == (1, 3)
+        np.testing.assert_allclose(w_via_force_reader[side], wp, atol=1e-15)
+        np.testing.assert_allclose(w_ft_via_force_reader[side], wf, atol=1e-15)
+        np.testing.assert_allclose(fo[0], wp[:3], atol=1e-14)
+        # 压缩法向力 Fz > 0，且两侧均测得显著抗扭扭矩 Tz。
+        assert wp[2] > 3.0
+        assert abs(wp[5]) > 0.005
+
+        # pad_center 与 ft_sensor 同向，仅沿局部 +Z 相差 7.5 mm：力与法向扭矩不变，弯矩精确平移。
+        np.testing.assert_allclose(wf[:3], wp[:3], atol=1e-13)
+        assert wf[5] == pytest.approx(wp[5], abs=1e-14)
+        # r_pad_in_ft = (0, 0, -0.0075) => delta_T = (0, 0, -0.0075) x (Fx, Fy, Fz) = (0.0075*Fy, -0.0075*Fx, 0)
+        assert wf[3] - wp[3] == pytest.approx(0.0075 * wp[1], abs=1e-13)
+        assert wf[4] - wp[4] == pytest.approx(-0.0075 * wp[0], abs=1e-13)
+
+        sid = wrench_pad.site_id(side)
+        assert sid is not None
+        rot_w = np.asarray(data.site_xmat[sid], dtype=np.float64).reshape(3, 3)
+        pos_w = np.asarray(data.site_xpos[sid], dtype=np.float64)
+        f_side_w = rot_w @ wp[:3]
+        t_side_w = rot_w @ wp[3:]
+        net_force_on_pads_w += f_side_w
+        net_moment_about_com_w += t_side_w + np.cross(pos_w - cube_com, f_side_w)
+
+    # 独立对比原始 mj_contactForce 对物块质心的总六轴接触力旋量，验证精确守恒与外载静力平衡。
+    raw_force_w = np.zeros(3)
+    raw_moment_w = np.zeros(3)
+    cfrc = np.zeros(6)
+    for cid in range(data.ncon):
+        con = data.contact[cid]
+        if cube_gid not in (con.geom1, con.geom2):
+            continue
+        cfrc.fill(0.0)
+        mujoco.mj_contactForce(model, data, cid, cfrc)
+        cf = np.asarray(con.frame, dtype=np.float64).reshape(3, 3)
+        sign = -1.0 if con.geom2 == cube_gid else 1.0
+        fw = sign * (cf.T @ cfrc[:3])
+        tw = sign * (cf.T @ cfrc[3:])
+        raw_force_w += fw
+        raw_moment_w += tw + np.cross(con.pos - cube_com, fw)
+
+    np.testing.assert_allclose(net_force_on_pads_w, raw_force_w, atol=1e-12)
+    np.testing.assert_allclose(net_moment_about_com_w, raw_moment_w, atol=1e-12)
+    # 准静态平衡下，物体对两侧球冠的总接触力和对物块质心的总力矩平衡外部施加载荷。
+    np.testing.assert_allclose(net_force_on_pads_w[1:3], [0.45, -0.75], atol=5e-3)
+    np.testing.assert_allclose(net_moment_about_com_w[:2], [0.024, 0.004], atol=2e-3)
+
+
+def test_wrench_reader_heterogeneous_modes_and_validation():
+    """验证 TactileWrenchReader 支持混装模组（pts_2_0 / paxini_m2824 / soft_dome / flat_pad）及参数校验。"""
+    scene = _attach_gripper_and_box(left_sensor="pts_2_0", right_sensor="soft_dome")
+    scene.option.cone = mujoco.mjtCone.mjCONE_ELLIPTIC
+    added = add_tactile_contact_pairs(
+        scene,
+        "cube/target_cube_geom",
+        left_sensor="pts_2_0",
+        right_sensor="soft_dome",
+        prefix="gripper/",
+        condim=6,
+        torsional_friction=0.008,
+        rolling_friction=0.0005,
+    )
+    assert len(added) == 10
+    model = scene.compile()
+    data = mujoco.MjData(model)
+    data.ctrl[0] = 0.3
+    mujoco.mj_step(model, data, nstep=500)
+
+    reader = TactileWrenchReader(
+        model,
+        left_sensor="pts_2_0",
+        right_sensor="soft_dome",
+        prefix="gripper/",
+    )
+    wrenches = reader.read(data)
+    assert wrenches["left"] is not None and wrenches["left"].shape == (6,)
+    assert wrenches["right"] is not None and wrenches["right"].shape == (6,)
+    assert wrenches["left"][2] > 2.0 and wrenches["right"][2] > 2.0
+
+    # 无传感侧返回 None，非法参数与未声明 ft_sensor 的模组明确报错。
+    passive_scene = _attach_gripper_and_box(left_sensor="paxini_m2824", right_sensor="flat_pad")
+    add_tactile_contact_pairs(
+        passive_scene,
+        "cube/target_cube_geom",
+        left_sensor="paxini_m2824",
+        right_sensor="flat_pad",
+        prefix="gripper/",
+        condim=4,
+    )
+    pm = passive_scene.compile()
+    pd = mujoco.MjData(pm)
+    pd.ctrl[0] = 0.3
+    mujoco.mj_step(pm, pd, nstep=400)
+    p_reader = TactileWrenchReader(
+        pm, left_sensor="paxini_m2824", right_sensor="flat_pad", prefix="gripper/"
+    )
+    pw = p_reader.read(pd)
+    assert pw["right"] is None and p_reader.site_id("right") is None
+    assert pw["left"] is not None and pw["left"][2] > 2.0
+
+    with pytest.raises(ValueError, match="frame"):
+        TactileWrenchReader(model, frame="invalid")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="底座测量系"):
+        TactileWrenchReader(
+            model,
+            left_sensor="pts_2_0",
+            right_sensor="soft_dome",
+            prefix="gripper/",
+            frame="ft_sensor",
+        )
+    with pytest.raises(ValueError, match="底座测量系"):
+        TactileWrenchReader(
+            pm, left_sensor="paxini_m2824", right_sensor=None, prefix="gripper/", frame="ft_sensor"
+        )
+    with pytest.raises(ValueError, match="side"):
+        reader.site_id("middle")
+    with pytest.raises(ValueError, match="torsional_friction"):
+        add_tactile_contact_pairs(scene, "cube/target_cube_geom", torsional_friction=-0.01)
+    with pytest.raises(ValueError, match="rolling_friction"):
+        add_tactile_contact_pairs(scene, "cube/target_cube_geom", rolling_friction=-0.01)
+
+
+def test_wrench_reader_refreshes_cache_when_geom_size_changes():
+    """验证原地修改盒式 pad_collision 的 geom_size 后，既有 TactileWrenchReader 自动刷新缓存并与新建一致。"""
+    scene = mujoco.MjSpec()
+    scene.option.gravity = [0.0, 0.0, 0.0]
+    scene.attach(
+        build_gripper_spec(
+            left_sensor="paxini_m2824", right_sensor=None, with_camera=False, fixed_base=True
+        ),
+        prefix="gripper/",
+        frame=scene.worldbody.add_frame(),
+    )
+    ref_model = scene.compile()
+    ref_data = mujoco.MjData(ref_model)
+    mujoco.mj_forward(ref_model, ref_data)
+    pad_gid_ref = ref_model.geom("gripper/left_pad_collision").id
+    pad_pos = ref_data.geom_xpos[pad_gid_ref].copy()
+    pad_rot = ref_data.geom_xmat[pad_gid_ref].reshape(3, 3)
+    probe_pos = pad_pos + pad_rot @ np.array([0.0, 0.0, 0.001 + 0.0018])
+    probe = scene.worldbody.add_body(name="resize_probe", pos=probe_pos.tolist())
+    probe.add_geom(
+        name="resize_probe_geom",
+        type=mujoco.mjtGeom.mjGEOM_SPHERE,
+        size=[0.002, 0.0, 0.0],
+        contype=0,
+        conaffinity=2,
+    )
+    add_tactile_contact_pairs(
+        scene,
+        "resize_probe_geom",
+        left_sensor="paxini_m2824",
+        right_sensor=None,
+        prefix="gripper/",
+    )
+    model = scene.compile()
+    data = mujoco.MjData(model)
+    reused = TactileWrenchReader(
+        model,
+        left_sensor="paxini_m2824",
+        right_sensor=None,
+        prefix="gripper/",
+        target_geoms="resize_probe_geom",
+    )
+
+    pad_gid = model.geom("gripper/left_pad_collision").id
+    model.geom_size[pad_gid, 2] = 0.001
+    mujoco.mj_forward(model, data)
+
+    fresh = TactileWrenchReader(
+        model,
+        left_sensor="paxini_m2824",
+        right_sensor=None,
+        prefix="gripper/",
+        target_geoms="resize_probe_geom",
+    )
+    reused_wrench = reused.read(data)["left"]
+    fresh_wrench = fresh.read(data)["left"]
+    assert reused_wrench is not None and fresh_wrench is not None
+    assert fresh_wrench[2] > 0.05
+    np.testing.assert_allclose(reused_wrench, fresh_wrench, atol=1e-12)

@@ -73,9 +73,11 @@ mesh_classes:
   pad_visual: rubber_pad
   paxini_m2824: rubber_pad
   paxini_m2824_adapter: pla_cf_structure
+  soft_dome: silicone
+  soft_dome_base: pla_cf_structure
 smooth_meshes: [bearing_8x4x2, bearing_8x4x2_2, bearing_8x4x2_3, bearing_8x4x2_4,
   stator, motor, pillars_0, pillars_1, pillars_2, pillars_3, pillars_4, pillars_5,
-  pillars_6, pillars_7, pillars_8, d435i_solid]
+  pillars_6, pillars_7, pillars_8, d435i_solid, soft_dome, soft_dome_base]
 presets:
   realistic:
     mesh_rgba:
@@ -115,4 +117,6 @@ presets:
       pillars_7: [1.0, 0.0, 1.0, 1.0]
       pillars_8: [1.0, 0.0, 1.0, 1.0]
       shim: [0.647059, 0.647059, 0.647059, 1.0]
+      soft_dome: [0.835294, 0.792157, 0.807843, 1.0]
+      soft_dome_base: [0.615686, 0.811765, 0.929412, 1.0]
       stator: [0.34902, 0.376471, 0.4, 1.0]

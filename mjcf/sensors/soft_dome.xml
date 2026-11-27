@@ -1,0 +1,35 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mujoco model="soft_dome">
+  <compiler angle="radian" meshdir="../../meshes" autolimits="true" />
+  <default>
+    <default class="parallel_gripper">
+      <default class="visual">
+        <geom type="mesh" contype="0" conaffinity="0" group="2" />
+      </default>
+      <default class="collision">
+        <geom group="3" />
+      </default>
+      <default class="pillar_collision">
+        <geom group="3" contype="8" conaffinity="9" friction="0.8 0.02 0.001" solref="-1200 -10" solimp="0.75 0.95 0.0025 0.5 2" />
+      </default>
+    </default>
+  </default>
+  <worldbody>
+    <body name="sensor_body" pos="0 0 0" quat="1 0 0 0" childclass="parallel_gripper">
+      <inertial pos="0 0 -0.0040437895" mass="0.0086633025" fullinertia="2.1989243e-07 2.1989243e-07 3.8546037e-07 0 0 0" />
+      <geom type="mesh" class="visual" pos="0 0 0" quat="1 0 0 0" mesh="soft_dome_base" material="pla_cf_structure" />
+      <geom type="mesh" class="visual" pos="0 0 0" quat="1 0 0 0" mesh="soft_dome" material="silicone" />
+      <geom name="sensor_housing_collision" class="collision" type="cylinder" pos="0 0 -0.0048" size="0.012001 0.001001" contype="4" conaffinity="1" />
+      <geom name="pad_collision" type="sphere" class="pillar_collision" pos="0 0 -0.0083" size="0.012" condim="4" friction="0.8 0.0064 0.0001" solref="-4800 -24" solimp="0.75 0.97 0.002 0.5 2" />
+      <site group="3" name="pad_center" pos="0 0 0.0037" quat="0 1 0 0" />
+      <site group="3" name="ft_sensor" pos="0 0 -0.0038" quat="0 1 0 0" />
+      <site name="fingertip" group="4" pos="0 0 0.0037" />
+    </body>
+  </worldbody>
+  <asset>
+    <mesh name="soft_dome" file="soft_dome/soft_dome.stl" smoothnormal="true" />
+    <mesh name="soft_dome_base" file="soft_dome/soft_dome_base.stl" smoothnormal="true" />
+    <material name="pla_cf_structure" rgba="0.14117647 0.26666667 0.62352941 1" specular="0.075" shininess="0.12" reflectance="0" />
+    <material name="silicone" rgba="0.83529412 0.79215686 0.80784314 1" specular="0.085" shininess="0.12" reflectance="0" />
+  </asset>
+</mujoco>

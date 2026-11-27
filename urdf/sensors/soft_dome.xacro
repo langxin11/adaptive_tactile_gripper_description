@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:macro name="soft_dome_sensor" params="prefix parent safety_distance:=0.0">
+    <joint name="${prefix}_sensor_joint" type="fixed">
+      <parent link="${parent}"/>
+      <child link="${prefix}_sensor_link"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+    <link name="${prefix}_sensor_link">
+      <inertial>
+        <origin xyz="0 0 -0.0040437895" rpy="0 0 0"/>
+        <mass value="0.0086633025"/>
+        <inertia ixx="2.1989243e-07" iyy="2.1989243e-07" izz="3.8546037e-07" ixy="0" ixz="0" iyz="0"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/soft_dome/soft_dome_base.stl"/></geometry>
+        <material name="${prefix}_pla_cf_structure"><color rgba="0.14117647 0.26666667 0.62352941 1"/></material>
+      </visual>
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry><mesh filename="package://adaptive_tactile_gripper_description/meshes/soft_dome/soft_dome.stl"/></geometry>
+        <material name="${prefix}_silicone"><color rgba="0.83529412 0.79215686 0.80784314 1"/></material>
+      </visual>
+      <collision name="${prefix}_sensor_housing_collision">
+        <origin xyz="0 0 ${-0.0048 + (-0.5) * safety_distance}" rpy="0 0 0"/>
+        <geometry><cylinder radius="${0.012001 + safety_distance}" length="${0.002002 + 1 * safety_distance}"/></geometry>
+      </collision>
+      <collision name="${prefix}_pad_collision">
+        <origin xyz="0 0 -0.0083" rpy="0 0 0"/>
+        <geometry><sphere radius="0.012"/></geometry>
+      </collision>
+    </link>
+    <joint name="${prefix}_fingertip_joint" type="fixed">
+      <parent link="${prefix}_sensor_link"/>
+      <child link="${prefix}_fingertip"/>
+      <origin xyz="0 0 0.0037" rpy="0 0 0"/>
+    </joint>
+    <link name="${prefix}_fingertip"/>
+  </xacro:macro>
+</robot>

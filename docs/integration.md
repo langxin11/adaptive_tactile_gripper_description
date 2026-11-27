@@ -74,7 +74,7 @@ xacro "$(ros2 pkg prefix adaptive_tactile_gripper_description)/share/adaptive_ta
 
 `panda_gripper_motion` 是单自由度规划组，完整的 `panda_gripper` 组包含被动连杆、指尖和安装帧，可用于末端定义与状态显示。URDF 以开链表达刚体，三个被动转动关节依赖上述闭环状态同步。执行侧用滑块位移或电机角控制机构，并将各被动关节状态由闭环关系重算。
 
-电机协议与机构有效曲柄角范围均为 `[0, 1.7] rad`，曲柄到 `1.7 rad`（约 97.4°）时单指闭合 37.553 mm（离曲柄轴套与对侧滑块碰撞极限仍有 1.75 mm 安全余量）。双侧均装 `pts_2_0` 或 `flat_pad`（含混装）时，名义首次接触提前至 **1.450404 rad、33.15 mm**；双侧装 `paxini_m2824`（3.5 mm 转接垫块）时，名义首次接触为 **1.610581 rad、36.05 mm**。用 `get_stroke_limits(left_sensor, right_sensor)` 获取任意组合的无接触上界。SRDF 的 `close` 单指闭合 32 mm（双 PTS/平垫对置净距 2.3 mm，双 `paxini_m2824` 对置净距 8.1 mm）。该净距在 `safety_distance=0.02` 时保持一致，因为余量只加到外部避障包络，指背及传感器壳体/转接座沿闭合轴仅向后扩展。两侧传感器之间始终参与碰撞检查。
+电机协议与机构有效曲柄角范围均为 `[0, 1.7] rad`，曲柄到 `1.7 rad`（约 97.4°）时单指闭合 37.553 mm（离曲柄轴套与对侧滑块碰撞极限仍有 1.75 mm 安全余量）。双侧均装 `pts_2_0` 或 `flat_pad`（含混装）时，名义首次接触提前至 **1.450404 rad、33.15 mm**；双侧装 `paxini_m2824` 或 `soft_dome`（含两者混装）时，名义首次接触为 **1.610581 rad、36.05 mm**。用 `get_stroke_limits(left_sensor, right_sensor)` 获取任意组合的无接触上界。SRDF 的 `close` 单指闭合 32 mm（双 PTS/平垫对置净距 2.3 mm，双 `paxini_m2824`/`soft_dome` 对置净距 8.1 mm）。该净距在 `safety_distance=0.02` 时保持一致，因为余量只加到外部避障包络，指背及传感器壳体/转接座沿闭合轴仅向后扩展。两侧传感器之间始终参与碰撞检查。
 
 ### 1.4 Franka Desk 负载核对
 
@@ -161,7 +161,7 @@ reader = TactileForceReader(
 ```
 
 现有 `tactile_grasp` 的场景生成和触觉读取器要求双侧 3×3，直接接入时使用双 PTS，可通过 `reader.read_grid(data, side)` 直接获取 `(3, rows, cols)` 数组；支持异构模组（含 135 测点 `paxini_m2824`）或手写读取逻辑时，按以下规则接入：
-- **`add_tactile_contact_pairs` / `TactileForceReader`（推荐）** 根据 `layout[side]["mode"]` 处理配对与读取。为 `contact_geom`（`pts_2_0`）逐球注册 `<pair>` 并读取各球的三维力。为 `pad_sites`（`paxini_m2824`）仅对整块平垫和目标几何体注册一条 `<pair>`，并把接触力分配到 135 个测点。`read(data)` 按 `layout[side]["taxels"]` 顺序返回各测点局部坐标系中的 `[Fx, Fy, Fz]`，无触觉侧返回 `None`。`read_grid(data, side)` 按测点声明的 `row` 和 `col` 排列。`target_geoms` 接受单个几何体名称、ID 或两者的序列。
+- **`add_tactile_contact_pairs` / `TactileForceReader` / `TactileWrenchReader`（推荐）** 根据 `layout[side]["mode"]` 处理配对与读取。为 `contact_geom`（`pts_2_0`）逐球注册 `<pair>` 并读取各球的三维力。为 `pad_sites`（`paxini_m2824`）仅对整块平垫和目标几何体注册一条 `<pair>`，并把接触力分配到 135 个测点。为 `pad_wrench`（`soft_dome`）对半径 12 mm 球面碰撞体注册一条默认 `condim=4`（含抗扭摩擦）的 `<pair>`，可通过 `TactileWrenchReader(..., frame="pad_center" | "ft_sensor")`（或 `TactileForceReader.read_wrench`）直接获取每侧 `(6,)` 局部六轴接触力旋量 `[Fx, Fy, Fz, Tx, Ty, Tz]`（受压时 `Fz > 0`，`Tz` 为绕内法向的抗扭扭矩）。`TactileForceReader.read(data)` 对阵列侧按 `layout[side]["taxels"]` 顺序返回 `[Fx, Fy, Fz]`，对 `pad_wrench` 侧返回 `(1, 3)` 合力，无触觉侧返回 `None`。`read_grid(data, side)` 按测点声明的 `row` 和 `col` 排列。`target_geoms` 接受单个几何体名称、ID 或两者的序列。
 - **手动查询 `layout`**：`contact_geom` 为每个 `taxel["geom_name"]` 注册 `<pair>`；`pad_sites` 整块平垫共用顶层 `layout[side]["pad_geom_name"]`，**仅可对该碰撞体注册一次 `<pair>`**（MuJoCo 不会对重复 `<pair>` 去重，按测点循环注册会成倍放大接触数量）。用挂载后的 `gripper/tcp` 站点放置场景对象，避免依赖两侧中心 taxel。自定义环境碰撞掩码时，壳体使用类型位 `4`，指间接触面使用类型位 `8`，二者均与默认环境类型位 `1` 交互。
 
 对 `pad_sites`，读取器基于垫块碰撞体自身坐标帧仅统计作用于前感应面的接触（自动排除垫块侧面与背面接触），以高斯权重（默认 `pad_sigma_m=0.0025` m）为先验，在前感应面切平面内通过局部非负指数倾斜校正权重质心。每个前表面接触的权重非负且和为一，将各测点力转换到同一坐标系后求和，前感应面三维合力守恒至浮点精度。投影接触点位于测点凸包内时，重构平面压力中心及平面力臂产生的一阶力矩。投影接触点位于凸包外时，按最近的凸包边界点重构压力中心及相应力矩。
@@ -193,6 +193,7 @@ reader = TactileForceReader(
 - **`+Y` 轴**：由右手定则 `Z × X` 确定。
 
 - **`paxini_m2824`（内置模块）**：PaXini `PX6AX-GEN4-GR-M2824-Gripper`（28.75 × 24.02 × 6.0 mm）配 3.5 mm 转接垫块，前接触面位于 `thickness_to_tip_m: 0.0037`（双侧全开净开口 72.1 mm，首次接触 1.610581 rad，距 1.7 rad 上限保留 1.50 mm/指压入余量）；MJCF/URDF 采用纯盒式碰撞（`pad_collision` + `sensor_housing_collision`，不使用接触球），并在 `pad_sites` 模式下暴露 135 个测点坐标帧（`taxel_001`–`taxel_135`）。
+- **`soft_dome`（内置模块）**：紧贴指腹安装面的 `Ø24 × 2.0 mm` 薄圆柱转接底座配 `7.5 mm` 硅胶扁球冠（前顶点位于 `thickness_to_tip_m: 0.0037`，距指腹总高 `9.5 mm`，球面曲率半径 $R = 12\text{ mm}$，球心位于 `[0, 0, -0.0083] m`；冠高 $h = R$ 时对应半球特例）。碰撞采用同轴 `cylinder` 底座 + 原生 `sphere`（默认 `condim=4` 椭圆摩擦锥 + 柔顺 `solref/solimp`），保证平面抓取时单侧唯一光滑接触点，便于直接对接 Limit Surface 控制器；同时暴露球冠顶点 `pad_center` 与球冠底面 `ft_sensor` 两个参考系供 `TactileWrenchReader` 读取六轴 F/T。
 
 ### 新增模组 3 步清单
 

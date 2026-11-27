@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>adaptive_tactile_gripper_description</name>
-  <version>0.2.0</version>
+  <version>0.3.0</version>
   <description>DM4310 曲柄滑块自适应触觉夹爪描述包（支持模块化触觉传感器与相机，提供 URDF/Xacro、MoveIt SRDF 与 MuJoCo MJCF）。</description>
   <maintainer email="2658327508@qq.com">Daliang Xiao</maintainer>
   <license>MIT</license>

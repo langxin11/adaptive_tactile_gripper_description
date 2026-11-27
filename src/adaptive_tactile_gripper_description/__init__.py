@@ -17,7 +17,7 @@ from .assembly import (
 from .kinematics import get_closure_jacobian, get_joint_positions
 from .tactile import TactileForceReader, TactileWrenchReader, add_tactile_contact_pairs
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "TactileForceReader",

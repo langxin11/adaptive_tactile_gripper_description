@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "adaptive-tactile-gripper-description"
-version = "0.2.0"
+version = "0.3.0"
 authors = [{name = "Daliang Xiao", email = "2658327508@qq.com"}]
 maintainers = [{name = "Daliang Xiao", email = "2658327508@qq.com"}]
 keywords = ["robotics", "gripper", "mujoco", "ros2", "tactile"]

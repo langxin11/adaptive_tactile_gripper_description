@@ -95,11 +95,8 @@ xacro "$(ros2 pkg prefix adaptive_tactile_gripper_description)/share/adaptive_ta
 ```toml
 dependencies = [
     # 其余已有依赖
-    # 仅需 pts_2_0 / flat_pad 及外观预设时，可固定到 v0.2.0 标签：
-    "adaptive-tactile-gripper-description @ git+https://github.com/langxin11/adaptive_tactile_gripper_description.git@v0.2.0",
-    # 如需使用 paxini_m2824、1.7 rad 行程及下文 add_tactile_contact_pairs / TactileForceReader，
-    # 请改用包含本特性的主干提交或后续发布标签（并经 uv lock 锁定提交哈希）：
-    # "adaptive-tactile-gripper-description @ git+https://github.com/langxin11/adaptive_tactile_gripper_description.git@main",
+    # 推荐固定到 v0.3.0 标签（含 paxini_m2824、soft_dome、1.7 rad 行程及 TactileForceReader / TactileWrenchReader）：
+    "adaptive-tactile-gripper-description @ git+https://github.com/langxin11/adaptive_tactile_gripper_description.git@v0.3.0",
 ]
 ```
 
@@ -118,8 +115,6 @@ dependencies = [
 双指总闭合雅可比在全开时从旧版的 `0.0424264 m/rad` 变为 B1 的 `0.0353553 m/rad`。力矩到夹持力的换算应使用当前实际曲柄角对应的 `get_closure_jacobian(q_rad)`，同时更新 FR3 的 TCP 偏置（沿法兰 +Z 增加 6 mm）。
 
 ### 2.3 动态组合仿真场景
-
-> 下述示例包含 `paxini_m2824` 模组与 `add_tactile_contact_pairs` / `TactileForceReader` 接口，需使用包含该特性的仓库提交或后续发布标签（见 2.1 节注释）；若仍锁定 `v0.2.0` 标签，请仅使用 `pts_2_0` / `flat_pad` 及 `build_gripper_spec`、`get_stroke_limits`、`get_tactile_layout`。
 
 ```python
 from adaptive_tactile_gripper_description import (

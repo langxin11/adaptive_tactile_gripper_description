@@ -17,7 +17,11 @@ import numpy as np
 from _style import panel_font
 from PIL import Image, ImageDraw
 
-from adaptive_tactile_gripper_description import build_gripper_spec, get_joint_positions
+from adaptive_tactile_gripper_description import (
+    build_gripper_spec,
+    get_joint_positions,
+    get_stroke_limits,
+)
 
 OUT_DIR = Path(__file__).resolve().parents[1] / "docs" / "images"
 
@@ -128,12 +132,13 @@ def _render_view(
     camera_name: str | None = None,
     show_taxels: bool = False,
     show_sites: bool = False,
+    show_site_frames: bool = True,
     light_samples: int = 16,
 ) -> np.ndarray:
     """用给定视角和可视化分组渲染单帧 RGB 图像。"""
     model.vis.global_.offwidth = 2 * width
     model.vis.global_.offheight = 2 * height
-    if show_sites:
+    if show_sites and show_site_frames:
         model.vis.scale.framelength = 0.10
         model.vis.scale.framewidth = 0.011
     renderer = mujoco.Renderer(model, height=2 * height, width=2 * width)
@@ -145,7 +150,7 @@ def _render_view(
         opt.geomgroup[5] = show_taxels
         opt.sitegroup[3] = 1 if show_sites else 0
         opt.sitegroup[4] = 0
-        if show_sites:
+        if show_sites and show_site_frames:
             opt.frame = mujoco.mjtFrame.mjFRAME_SITE
 
         if camera_name is not None:
@@ -187,6 +192,7 @@ def _save_panel(
     out_path: Path,
     *,
     suptitle: str,
+    label_size: int = 37,
 ) -> None:
     """将多张渲染帧合成为带中文标题的对比图。"""
     margin, gutter = 30, 18
@@ -198,7 +204,7 @@ def _save_panel(
     )
     draw = ImageDraw.Draw(panel)
     title_font = panel_font(46)
-    label_font = panel_font(37)
+    label_font = panel_font(label_size)
     draw.text((margin, 22), suptitle, font=title_font, fill="#f2f5f7", anchor="lt")
     draw.line((margin, 85, panel.width - margin, 85), fill="#3d4b5a", width=2)
     for index, (array, title) in enumerate(zip(images, titles, strict=True)):
@@ -251,9 +257,10 @@ def render_overview_default() -> None:
 
 
 def render_modular_variants() -> None:
-    """渲染 3 种模块化配置对比图。"""
+    """渲染 4 种模块化配置对比图（含 PaXini M2824）。"""
     configs = [
         ("pts_2_0", "pts_2_0", True, "双 PTS 2.0 与 D435i"),
+        ("paxini_m2824", "paxini_m2824", True, "双 PaXini M2824 与 D435i"),
         ("pts_2_0", "flat_pad", False, "左 PTS 2.0、右平垫、无相机"),
         (None, None, False, "底盘（保留模组安装面）"),
     ]
@@ -266,7 +273,14 @@ def render_modular_variants() -> None:
         mujoco.mj_forward(m, d)
         imgs.append(
             _render_view(
-                m, d, lookat=[0.0, -0.01, 0.085], distance=0.34, azimuth=132.0, elevation=-20.0
+                m,
+                d,
+                width=760,
+                height=640,
+                lookat=[0.0, -0.01, 0.085],
+                distance=0.35,
+                azimuth=132.0,
+                elevation=-20.0,
             )
         )
         titles.append(title)
@@ -275,6 +289,7 @@ def render_modular_variants() -> None:
         titles,
         OUT_DIR / "modular_variants.png",
         suptitle="指尖与相机模组配置",
+        label_size=33,
     )
 
 
@@ -348,6 +363,119 @@ def render_tactile_collision_and_sites() -> None:
     )
 
 
+def render_paxini_m2824_mounting() -> None:
+    """渲染 PaXini M2824 安装特写、双侧零间隙闭合与 135 测点盒式碰撞示意。"""
+    spec = _prepare_spec(left_sensor="paxini_m2824", right_sensor="paxini_m2824", with_camera=False)
+    spec.light("fill").diffuse = [0.34, 0.38, 0.44]
+    m = spec.compile()
+    d = mujoco.MjData(m)
+    mujoco.mj_forward(m, d)
+
+    # 1. 全开状态指尖特写（展示 3.5 mm PLA-CF 转接垫块与斜倒角传感头）
+    img_mount = _render_view(
+        m,
+        d,
+        lookat=[0.0, 0.0, 0.145],
+        distance=0.145,
+        azimuth=128.0,
+        elevation=-16.0,
+    )
+
+    # 2. 双侧零间隙首次接触闭合位置
+    contact_q = float(get_stroke_limits("paxini_m2824", "paxini_m2824")["first_contact_q_rad"])
+    positions = get_joint_positions(contact_q)
+    for name, value in positions.items():
+        if name != "gripper_backlash":
+            d.joint(name).qpos[0] = value
+    mujoco.mj_forward(m, d)
+    img_closed = _render_view(
+        m,
+        d,
+        lookat=[0.0, 0.0, 0.144],
+        distance=0.115,
+        azimuth=90.0,
+        elevation=-10.0,
+    )
+
+    # 3. 左指盒式碰撞包络（隐藏传感器视觉网格避免共面 Z-fighting）与 135 测点分布
+    mujoco.mj_resetData(m, d)
+    mujoco.mj_forward(m, d)
+    for gid in range(m.ngeom):
+        gname = m.geom(gid).name
+        if gname == "left_pad_collision":
+            m.geom_group[gid] = 5
+            m.geom_rgba[gid] = [0.05, 0.85, 0.98, 0.45]
+        elif gname == "left_sensor_housing_collision":
+            m.geom_group[gid] = 5
+            m.geom_rgba[gid] = [0.95, 0.65, 0.18, 0.48]
+        elif m.geom_type[gid] == mujoco.mjtGeom.mjGEOM_MESH:
+            mesh_name = m.mesh(m.geom_dataid[gid]).name
+            if m.body(m.geom_bodyid[gid]).name == "left_sensor_body" and mesh_name.startswith(
+                "left_paxini_m2824"
+            ):
+                m.geom_group[gid] = 3
+    for sid in range(m.nsite):
+        sname = m.site(sid).name
+        if sname.startswith("left_taxel_"):
+            m.site_group[sid] = 3
+            m.site_size[sid] = [0.00058, 0.00058, 0.00058]
+            m.site_rgba[sid] = [0.22, 0.96, 0.48, 1.0]
+        elif sname == "left_pad_center":
+            m.site_group[sid] = 3
+            m.site_size[sid] = [0.0011, 0.0011, 0.0011]
+            m.site_rgba[sid] = [1.0, 0.28, 0.28, 1.0]
+        else:
+            m.site_group[sid] = 4
+
+    center = d.site("left_pad_center").xpos.copy()
+    center[2] -= 0.003
+    img_sites = Image.fromarray(
+        _render_view(
+            m,
+            d,
+            lookat=center.tolist(),
+            distance=0.068,
+            azimuth=144.0,
+            elevation=-18.0,
+            show_taxels=True,
+            show_sites=True,
+            show_site_frames=False,
+        )
+    )
+    draw = ImageDraw.Draw(img_sites)
+    legend_items = (
+        ("#22e2ff", "pad_collision"),
+        ("#f5a933", "housing_collision"),
+        ("#38f57a", "135 测点"),
+        ("#ff4c4c", "pad_center"),
+    )
+    lx = 24
+    legend_font = panel_font(26)
+    for color, text in legend_items:
+        draw.ellipse((lx, 26, lx + 16, 42), fill=color, outline="#17202a")
+        draw.text(
+            (lx + 24, 18),
+            text,
+            font=legend_font,
+            fill="#f2f5f7",
+            stroke_width=2,
+            stroke_fill="#17202a",
+        )
+        lx += int(draw.textlength(text, font=legend_font)) + 44
+
+    slide_mm = positions["left_finger_slide"] * 1000.0
+    _save_panel(
+        [img_mount, img_closed, np.asarray(img_sites)],
+        [
+            "指尖装配特写（3.5 mm 转接垫块）",
+            f"零间隙闭合（q = {contact_q:.2f} rad，单指 {slide_mm:.2f} mm）",
+            "盒式碰撞包络与 135 测点分布",
+        ],
+        OUT_DIR / "paxini_m2824_mounting.png",
+        suptitle="PaXini M2824 触觉模组安装与碰撞示意",
+    )
+
+
 def render_closure_sequence() -> None:
     """渲染闭环曲柄滑块在 0.00 / 0.75 / 1.45 rad 下的对称闭合序列。"""
     spec = _prepare_spec(left_sensor="pts_2_0", right_sensor="pts_2_0", with_camera=False)
@@ -382,8 +510,9 @@ def main() -> int:
     render_overview_default()
     render_modular_variants()
     render_tactile_collision_and_sites()
+    render_paxini_m2824_mounting()
     render_closure_sequence()
-    print(f"已生成 5 张预览图到 {OUT_DIR}")
+    print(f"已生成 6 张预览图到 {OUT_DIR}")
     return 0
 
 

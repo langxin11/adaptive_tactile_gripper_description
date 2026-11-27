@@ -68,6 +68,10 @@ uv run atg-description render
 
 ![触觉碰撞球与 Site 坐标系](docs/images/tactile_collision_and_sites.png)
 
+### PaXini M2824 安装、零间隙闭合与 135 测点示意
+
+![PaXini M2824 安装与 135 测点碰撞示意](docs/images/paxini_m2824_mounting.png)
+
 ### 闭环曲柄滑块对称闭合序列
 
 ![闭环闭合序列](docs/images/closure_sequence.png)
